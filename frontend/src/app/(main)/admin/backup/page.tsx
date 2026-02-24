@@ -2,19 +2,10 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback } from "react";
-import { Database, Download, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Database, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
 
@@ -22,6 +13,8 @@ export default function BackupPage() {
   const { isAdmin } = useAuth();
   const [creating, setCreating] = useState(false);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
+
+  if (!isAdmin) return null;
 
   const createBackup = async () => {
     setCreating(true);
