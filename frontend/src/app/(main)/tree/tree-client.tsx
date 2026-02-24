@@ -1687,7 +1687,7 @@ export default function TreeViewPage() {
           <span className="w-2.5 h-2.5 rounded-sm bg-slate-200 border border-slate-400" />{" "}
           Đã mất
         </span>
-        <span className="ml-auto opacity-50">
+        <span className="ml-auto ">
           Cuộn để zoom • Kéo để di chuyển • Nhấn để xem
         </span>
       </div>
