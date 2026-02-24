@@ -52,6 +52,7 @@ export interface Connection {
   toX: number;
   toY: number;
   type: "parent-child" | "couple";
+  d?: string; // Optional pre-computed SVG path
 }
 
 export interface LayoutResult {
@@ -521,10 +522,33 @@ export function computeLayout(
   const placed = new Set<string>();
   let cursorX = 0;
 
+  // Build subtrees for root families
   for (const fam of rootFamilies) {
     const subtree = buildSubtree(fam, personMap, familyMap, visited);
     if (!subtree) continue;
-    assignPositions(subtree, cursorX, 0, allNodes, placed);
+
+    const rootGen =
+      subtree.patrilineal && subtree.patrilineal.generation > 0
+        ? subtree.patrilineal.generation - 1
+        : 0;
+
+    assignPositions(subtree, cursorX, rootGen, allNodes, placed);
+    cursorX += subtree.width + H_SPACE;
+  }
+
+  // Handle "Islands": Families that were not connected to roots (possibly due to cycles)
+  for (const fam of families) {
+    if (visited.has(fam.handle)) continue;
+
+    const subtree = buildSubtree(fam, personMap, familyMap, visited);
+    if (!subtree) continue;
+
+    const rootGen =
+      subtree.patrilineal && subtree.patrilineal.generation > 0
+        ? subtree.patrilineal.generation - 1
+        : 0;
+
+    assignPositions(subtree, cursorX, rootGen, allNodes, placed);
     cursorX += subtree.width + H_SPACE;
   }
 
@@ -575,6 +599,11 @@ export function computeLayout(
     const patriNode =
       (fatherNode?.node.isPatrilineal ? fatherNode : motherNode) ?? fatherNode;
 
+    if (!patriNode) continue;
+
+    // Safety check for NaN or Infinity
+    if (!isFinite(patriNode.x) || !isFinite(patriNode.y)) continue;
+
     // Couple line (horizontal between cards)
     if (fatherNode && motherNode) {
       const left = fatherNode.x < motherNode.x ? fatherNode : motherNode;
@@ -595,7 +624,7 @@ export function computeLayout(
       });
     }
 
-    // Parent-child connections: strictly orthogonal bus-line
+    // Parent-child connections: strictly orthogonal bus-line with curved elbows
     if (patriNode && fam.children.length > 0) {
       const parentCX = patriNode.x + CARD_W / 2;
       const parentBottomY = patriNode.y + CARD_H;
@@ -608,6 +637,7 @@ export function computeLayout(
       const childTopY = placedChildren[0].y;
       // Bus Y = halfway between parent bottom and child top
       const busY = parentBottomY + (childTopY - parentBottomY) * 0.5;
+      const R = 12; // Radius for curved elbows
 
       if (placedChildren.length === 1) {
         const childCX = placedChildren[0].x + CARD_W / 2;
@@ -620,72 +650,86 @@ export function computeLayout(
             toX: parentCX,
             toY: childTopY,
             type: "parent-child",
+            d: `M${parentCX},${parentBottomY} L${parentCX},${childTopY}`,
           });
         } else {
-          // L-shape: vertical → horizontal → vertical
+          // L-shape with curves
+          const dx = childCX > parentCX ? 1 : -1;
           connections.push({
             fromX: parentCX,
             fromY: parentBottomY,
-            toX: parentCX,
-            toY: busY,
-            type: "parent-child",
-          });
-          connections.push({
-            fromX: parentCX,
-            fromY: busY,
-            toX: childCX,
-            toY: busY,
-            type: "parent-child",
-          });
-          connections.push({
-            fromX: childCX,
-            fromY: busY,
             toX: childCX,
             toY: childTopY,
             type: "parent-child",
+            d: `M${parentCX},${parentBottomY} 
+                  V${busY - R} 
+                  Q${parentCX},${busY} ${parentCX + dx * R},${busY} 
+                  H${childCX - dx * R} 
+                  Q${childCX},${busY} ${childCX},${busY + R} 
+                  V${childTopY}`,
           });
         }
       } else {
         // RULE 2: vertical stub → horizontal bus → vertical drops
-        // All segments are strictly orthogonal
+        const childCenters = placedChildren
+          .map((c) => c.x + CARD_W / 2)
+          .sort((a, b) => a - b);
 
-        // 1. Vertical stub down from parent center to bus
+        const busLeft = childCenters[0];
+        const busRight = childCenters[childCenters.length - 1];
+
+        // 1. Parent stub down to bus height
         connections.push({
           fromX: parentCX,
           fromY: parentBottomY,
           toX: parentCX,
           toY: busY,
           type: "parent-child",
+          d: `M${parentCX},${parentBottomY} L${parentCX},${busY}`,
         });
 
-        // 2. Horizontal bus spanning all children
-        const childCenters = placedChildren
-          .map((c) => c.x + CARD_W / 2)
-          .sort((a, b) => a - b);
-        const busLeft = Math.min(parentCX, childCenters[0]);
-        const busRight = Math.max(
-          parentCX,
-          childCenters[childCenters.length - 1],
-        );
+        // 2. Horizontal segments between children points
+        // To prevent "overshooting", we only draw the bus between the curve-start points
+        // and the parent junction.
 
-        connections.push({
-          fromX: busLeft,
-          fromY: busY,
-          toX: busRight,
-          toY: busY,
-          type: "parent-child",
-        });
-
-        // 3. Vertical drops from bus to each child
+        // For each child, draw the drop and its curve to the bus
         for (const child of placedChildren) {
           const cx = child.x + CARD_W / 2;
-          connections.push({
-            fromX: cx,
-            fromY: busY,
-            toX: cx,
-            toY: childTopY,
-            type: "parent-child",
-          });
+          const dx = cx > parentCX ? 1 : cx < parentCX ? -1 : 0;
+
+          if (dx === 0) {
+            // Direct drop from T-junction
+            connections.push({
+              fromX: cx,
+              fromY: busY,
+              toX: cx,
+              toY: childTopY,
+              type: "parent-child",
+              d: `M${cx},${busY} L${cx},${childTopY}`,
+            });
+          } else {
+            // Curved drop from horizontal bus
+            connections.push({
+              fromX: cx,
+              fromY: busY,
+              toX: cx,
+              toY: childTopY,
+              type: "parent-child",
+              d: `M${cx - dx * R},${busY} Q${cx},${busY} ${cx},${busY + R} V${childTopY}`,
+            });
+
+            // Draw horizontal segment from parent junction to this curve start
+            // (Note: this might overlap other horizontal segments if we are not careful,
+            // but we'll draw from parentCX to cx - dx*R)
+            connections.push({
+              fromX: parentCX,
+              fromY: busY,
+              toX: cx - dx * R,
+              toY: busY,
+              type: "parent-child",
+              d: `M${parentCX},${busY} L${cx - dx * R},${busY}`,
+            });
+          }
         }
       }
     }
@@ -737,11 +781,16 @@ function assignGenerations(
 
   for (const p of people) {
     if (p.parentFamilies.length === 0 && !gens.has(p.handle)) {
-      setGen(p.handle, 0);
+      // Use absolute generation from DB as starting point
+      const startGen = p.generation > 0 ? p.generation - 1 : 0;
+      setGen(p.handle, startGen);
     }
   }
   for (const p of people) {
-    if (!gens.has(p.handle)) setGen(p.handle, 0);
+    if (!gens.has(p.handle)) {
+      const startGen = p.generation > 0 ? p.generation - 1 : 0;
+      setGen(p.handle, startGen);
+    }
   }
 
   return gens;

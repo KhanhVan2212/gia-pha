@@ -221,9 +221,11 @@ function computePersonGenerations(
   const roots = people.filter((p) => p.isPatrilineal && !childOf.has(p.handle));
   const gens = new Map<string, number>();
   const familyMap = new Map(families.map((f) => [f.handle, f]));
+
+  // Use absolute generation from DB as starting point for each root
   const queue: { handle: string; gen: number }[] = roots.map((r) => ({
     handle: r.handle,
-    gen: 0,
+    gen: r.generation > 0 ? r.generation - 1 : 0,
   }));
   while (queue.length > 0) {
     const { handle, gen } = queue.shift()!;
@@ -720,9 +722,12 @@ export default function TreeViewPage() {
       if (c.type === "couple") {
         cp += `M${c.fromX},${c.fromY}L${c.toX},${c.toY}`;
       } else {
-        // Each connection segment is already a single straight line
-        // (either horizontal or vertical) from the layout engine
-        pp += `M${c.fromX},${c.fromY}L${c.toX},${c.toY}`;
+        // If pre-computed path exists, use it, otherwise fallback to straight line
+        if (c.d) {
+          pp += c.d;
+        } else {
+          pp += `M${c.fromX},${c.fromY}L${c.toX},${c.toY}`;
+        }
       }
     }
     // Visible couples for hearts
@@ -1190,12 +1195,45 @@ export default function TreeViewPage() {
                   height={layout.height}
                   style={{ overflow: "visible" }}
                 >
+                  <defs>
+                    <linearGradient
+                      id="line-gradient"
+                      x1="0%"
+                      y1="0%"
+                      x2="0%"
+                      y2="100%"
+                    >
+                      <stop offset="0%" stopColor="#94a3b8" />
+                      <stop offset="100%" stopColor="#cbd5e1" />
+                    </linearGradient>
+                    <filter
+                      id="shadow"
+                      x="-20%"
+                      y="-20%"
+                      width="140%"
+                      height="140%"
+                    >
+                      <feGaussianBlur in="SourceAlpha" stdDeviation="1" />
+                      <feOffset dx="0" dy="1" result="offsetblur" />
+                      <feComponentTransfer>
+                        <feFuncA type="linear" slope="0.3" />
+                      </feComponentTransfer>
+                      <feMerge>
+                        <feMergeNode />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  </defs>
                   {parentPaths && (
                     <path
                       d={parentPaths}
-                      stroke="#94a3b8"
-                      strokeWidth={1.5}
+                      stroke="url(#line-gradient)"
+                      strokeWidth={2}
                       fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      filter="url(#shadow)"
+                      className="transition-all duration-300"
                     />
                   )}
                   {couplePaths && (
@@ -1205,6 +1243,9 @@ export default function TreeViewPage() {
                       strokeWidth={1.5}
                       fill="none"
                       strokeDasharray="4,3"
+                      strokeLinecap="round"
+                      filter="url(#shadow)"
+                      className="opacity-60"
                     />
                   )}
                   {/* Couple hearts — only visible */}
@@ -1998,7 +2039,6 @@ function PersonCard({
           >
             {initials}
           </div>
-          
         </div>
 
         {/* Info */}
@@ -2163,7 +2203,7 @@ function GenerationHeaders({
         return (
           <div
             key={gen}
-            className="absolute left-0 flex items-center text-[10px] transition-transform duration-100"
+            className="hidden sm:absolute left-0 sm:flex items-center text-[10px] transition-transform duration-100"
             style={{
               top: screenY + (cardH * transform.scale) / 2 - 10,
               height: 20,
@@ -2173,7 +2213,7 @@ function GenerationHeaders({
               className="bg-slate-800/70 backdrop-blur text-white px-2 py-0.5 rounded-r-md
                             font-medium whitespace-nowrap shadow-sm"
             >
-              Đ{gen} <span className="opacity-70">· {count}</span>
+              Đời {gen} <span className="opacity-70">· {count} thành viên</span>
             </div>
           </div>
         );
@@ -2478,7 +2518,7 @@ function EditorPanel({
           {/* Editable person info */}
           <div className="p-3 border-b space-y-2">
             <p className="text-xs text-muted-foreground">
-              Đời {(person as any).generation ?? "?"} 
+              Đời {(person as any).generation ?? "?"}
             </p>
             {parentPerson && (
               <p className="text-xs text-muted-foreground">

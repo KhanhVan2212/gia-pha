@@ -36,11 +36,11 @@ const navItems = [
 ];
 
 const adminItems = [
-  { href: "/admin/people", label: "Quản lý Gia phả", icon: Users },
-  { href: "/admin/users", label: "Quản lý Users", icon: Shield },
+  { href: "/admin/people", label: "Quản lý gia phả", icon: Users },
+  { href: "/admin/users", label: "Quản lý người dùng", icon: Shield },
   { href: "/admin/edits", label: "Kiểm duyệt", icon: ClipboardCheck },
-  { href: "/admin/audit", label: "Audit Log", icon: FileText },
-  { href: "/admin/backup", label: "Backup", icon: Database },
+  { href: "/admin/audit", label: "Lịch sử hoạt động", icon: FileText },
+  { href: "/admin/backup", label: "Sao lưu", icon: Database },
 ];
 
 export function Sidebar() {

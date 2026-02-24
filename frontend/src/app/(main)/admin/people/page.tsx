@@ -45,6 +45,13 @@ interface Person {
   created_at: string;
 }
 
+interface Family {
+  handle: string;
+  father_handle: string | null;
+  mother_handle: string | null;
+  children: string[];
+}
+
 interface PersonFormData {
   display_name: string;
   gender: number;
@@ -53,8 +60,10 @@ interface PersonFormData {
   death_year: string;
   is_living: boolean;
   is_patrilineal: boolean;
-  parent_handle: string; // handle of the parent person to attach to
-  spouse_handle: string; // handle of spouse (only for non-patrilineal members)
+  parent_handle: string; // Used as father_handle
+  mother_handle: string; // New: handle of mother
+  spouse_handle: string;
+  child_handles: string[];
 }
 
 const EMPTY_FORM: PersonFormData = {
@@ -66,12 +75,15 @@ const EMPTY_FORM: PersonFormData = {
   is_living: true,
   is_patrilineal: true,
   parent_handle: "",
+  mother_handle: "",
   spouse_handle: "",
+  child_handles: [],
 };
 
 export default function AdminPeoplePage() {
   const { isAdmin, loading: authLoading } = useAuth();
   const [people, setPeople] = useState<Person[]>([]);
+  const [families, setFamilies] = useState<Family[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -86,12 +98,18 @@ export default function AdminPeoplePage() {
   const fetchPeople = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("people")
-        .select("*")
-        .order("generation", { ascending: true })
-        .order("display_name", { ascending: true });
-      if (!error && data) setPeople(data as Person[]);
+      const [peopleRes, familiesRes] = await Promise.all([
+        supabase
+          .from("people")
+          .select("*")
+          .order("generation", { ascending: true })
+          .order("display_name", { ascending: true }),
+        supabase.from("families").select("*"),
+      ]);
+
+      if (!peopleRes.error && peopleRes.data)
+        setPeople(peopleRes.data as Person[]);
+      if (!familiesRes.error && familiesRes.data) setFamilies(familiesRes.data);
     } catch {
       /* ignore */
     }
@@ -147,7 +165,63 @@ export default function AdminPeoplePage() {
       );
     } finally {
       setProcessingId(null);
+      // Automatically clean up any families that might have become empty
+      await cleanupFamilies();
     }
+  };
+
+  // ─── Cleanup Empty Families ────────────────────────────────
+  const cleanupFamilies = async () => {
+    try {
+      // 1. Fetch current data
+      const { data: fams } = await supabase.from("families").select("*");
+      const { data: peps } = await supabase.from("people").select("handle");
+
+      if (!fams || !peps) return;
+
+      const personHandles = new Set(peps.map((p) => p.handle));
+      const toDelete: string[] = [];
+
+      for (const fam of fams as Family[]) {
+        // A family is "zombie" if:
+        // 1. No parents (or parents don't exist in people table)
+        // 2. AND No children (or children don't exist in people table)
+
+        const fatherExists =
+          fam.father_handle && personHandles.has(fam.father_handle);
+        const motherExists =
+          fam.mother_handle && personHandles.has(fam.mother_handle);
+        const validChildren = (fam.children || []).filter((c) =>
+          personHandles.has(c),
+        );
+
+        if (!fatherExists && !motherExists && validChildren.length === 0) {
+          toDelete.push(fam.handle);
+        }
+      }
+
+      if (toDelete.length > 0) {
+        console.log(
+          `Cleaning up ${toDelete.length} zombie families:`,
+          toDelete,
+        );
+        await supabase.from("families").delete().in("handle", toDelete);
+        // Refresh families state
+        const { data: newFams } = await supabase.from("families").select("*");
+        if (newFams) setFamilies(newFams);
+      }
+      return toDelete.length;
+    } catch (err) {
+      console.error("Cleanup error:", err);
+      return 0;
+    }
+  };
+
+  const handleManualCleanup = async () => {
+    setLoading(true);
+    const count = await cleanupFamilies();
+    alert(`Đã dọn dẹp ${count} bản ghi gia đình trống.`);
+    setLoading(false);
   };
 
   // ─── Open Add Modal ───────────────────────────────────────
@@ -160,6 +234,32 @@ export default function AdminPeoplePage() {
 
   // ─── Open Edit Modal ──────────────────────────────────────
   const openEditModal = (person: Person) => {
+    setEditPerson(person);
+    setFormError("");
+    // Find parent_handle and spouse_handle from existing families
+    let fatherHandle = "";
+    let motherHandle = "";
+    let spouseHandle = "";
+
+    // If person is child in some family -> get parents
+    const parentFam = families.find((f) => f.children.includes(person.handle));
+    if (parentFam) {
+      fatherHandle = parentFam.father_handle || "";
+      motherHandle = parentFam.mother_handle || "";
+    }
+
+    // If person is parent in some family -> get spouse
+    const spouseFam = families.find(
+      (f) =>
+        f.father_handle === person.handle || f.mother_handle === person.handle,
+    );
+    if (spouseFam) {
+      spouseHandle =
+        spouseFam.father_handle === person.handle
+          ? spouseFam.mother_handle || ""
+          : spouseFam.father_handle || "";
+    }
+
     setForm({
       display_name: person.display_name,
       gender: person.gender,
@@ -168,11 +268,11 @@ export default function AdminPeoplePage() {
       death_year: person.death_year?.toString() || "",
       is_living: person.is_living,
       is_patrilineal: person.is_patrilineal,
-      parent_handle: "",
-      spouse_handle: "",
+      parent_handle: fatherHandle,
+      mother_handle: motherHandle,
+      spouse_handle: spouseHandle,
+      child_handles: [], // Not used for now in edit
     });
-    setFormError("");
-    setEditPerson(person);
     setAddModalOpen(true);
   };
 
@@ -192,9 +292,39 @@ export default function AdminPeoplePage() {
     setFormError("");
 
     try {
+      const personMap = new Map(people.map((p) => [p.handle, p]));
+      const familyMap = new Map(families.map((f) => [f.handle, f]));
+      const pendingGenUpdates = new Map<string, number>();
+
+      const syncGens = (h: string, targetGen: number, visited: Set<string>) => {
+        if (visited.has(h)) return;
+        visited.add(h);
+
+        const p = personMap.get(h);
+        if (!p) return;
+
+        pendingGenUpdates.set(h, targetGen);
+
+        // Sync spouses (at same generation) and children (at Gen + 1)
+        for (const famHandle of p.families || []) {
+          const fam = familyMap.get(famHandle);
+          if (!fam) continue;
+
+          const spouseHandle =
+            fam.father_handle === h ? fam.mother_handle : fam.father_handle;
+          if (spouseHandle) {
+            syncGens(spouseHandle, targetGen, visited);
+          }
+
+          for (const childHandle of fam.children || []) {
+            syncGens(childHandle, targetGen + 1, visited);
+          }
+        }
+      };
+
       if (editPerson) {
         // ── EDIT mode ──
-        const updates: Record<string, unknown> = {
+        const updates: Partial<Person> = {
           display_name: form.display_name.trim(),
           gender: form.gender,
           generation: form.generation,
@@ -202,41 +332,269 @@ export default function AdminPeoplePage() {
           death_year: form.death_year ? parseInt(form.death_year) : null,
           is_living: form.is_living,
           is_patrilineal: form.is_patrilineal,
+          families: editPerson.families || [],
+          parent_families: editPerson.parent_families || [],
           updated_at: new Date().toISOString(),
         };
 
+        // Circular Dependency Guard (Check both father and mother)
+        const checkCircular = (startHandle: string) => {
+          const ancestors = new Set<string>();
+          let curr: string | undefined = startHandle;
+          while (curr) {
+            if (curr === editPerson.handle) return true;
+            ancestors.add(curr);
+            const parentP = personMap.get(curr);
+            const pfHandle = parentP?.parent_families?.[0];
+            const pf = pfHandle ? familyMap.get(pfHandle) : null;
+            // Simplified: just follow father line or mother line for guard
+            curr = pf?.father_handle || pf?.mother_handle || undefined;
+            if (ancestors.has(curr || "")) break;
+          }
+          return false;
+        };
+
+        if (form.parent_handle && checkCircular(form.parent_handle)) {
+          setFormError(
+            "Không thể gán người này làm con của chính con cháu họ.",
+          );
+          setSaving(false);
+          return;
+        }
+        if (form.mother_handle && checkCircular(form.mother_handle)) {
+          setFormError(
+            "Không thể gán người này làm con của chính con cháu họ (mẹ).",
+          );
+          setSaving(false);
+          return;
+        }
+
+        // Initialize sync for this person and descendants
+        const visitedTotal = new Set<string>();
+        syncGens(editPerson.handle, form.generation, visitedTotal);
+
+        // 1. Parent relationship changes
+        let oldFatherHandle = "";
+        let oldMotherHandle = "";
+        if (editPerson.parent_families?.length > 0) {
+          const pf = families.find(
+            (f) => f.handle === editPerson.parent_families[0],
+          );
+          if (pf) {
+            oldFatherHandle = pf.father_handle || "";
+            oldMotherHandle = pf.mother_handle || "";
+          }
+        }
+
+        const targetFatherHandle = form.parent_handle;
+        const targetMotherHandle = form.mother_handle;
+        if (
+          targetFatherHandle !== oldFatherHandle ||
+          targetMotherHandle !== oldMotherHandle
+        ) {
+          // Remove from old
+          if (editPerson.parent_families?.length > 0) {
+            const ofHandle = editPerson.parent_families[0];
+            const of = families.find((f) => f.handle === ofHandle);
+            if (of) {
+              const nc = (of.children || []).filter(
+                (c) => c !== editPerson.handle,
+              );
+              await supabase
+                .from("families")
+                .update({ children: nc })
+                .eq("handle", ofHandle);
+            }
+          }
+          // Add to new
+          if (targetFatherHandle || targetMotherHandle) {
+            // Find existing family for this couple
+            let query = supabase.from("families").select("*");
+            if (targetFatherHandle)
+              query = query.eq("father_handle", targetFatherHandle);
+            else query = query.is("father_handle", null);
+
+            if (targetMotherHandle)
+              query = query.eq("mother_handle", targetMotherHandle);
+            else query = query.is("mother_handle", null);
+
+            const { data: nfamData } = await query.limit(1);
+
+            if (nfamData && nfamData.length > 0) {
+              const nfam = nfamData[0];
+              await supabase
+                .from("families")
+                .update({
+                  children: [...(nfam.children || []), editPerson.handle],
+                })
+                .eq("handle", nfam.handle);
+              updates.parent_families = [nfam.handle];
+            } else {
+              const baseHandle = targetFatherHandle || targetMotherHandle;
+              const nfamHandle = `f-${baseHandle}-${Date.now()}`;
+              await supabase.from("families").insert({
+                handle: nfamHandle,
+                father_handle: targetFatherHandle || null,
+                mother_handle: targetMotherHandle || null,
+                children: [editPerson.handle],
+              });
+              updates.parent_families = [nfamHandle];
+
+              // Update parents' families list
+              if (targetFatherHandle) {
+                const pObj = personMap.get(targetFatherHandle);
+                if (pObj) {
+                  await supabase
+                    .from("people")
+                    .update({
+                      families: [...(pObj.families || []), nfamHandle],
+                    })
+                    .eq("handle", targetFatherHandle);
+                }
+              }
+              if (targetMotherHandle) {
+                const pObj = personMap.get(targetMotherHandle);
+                if (pObj) {
+                  await supabase
+                    .from("people")
+                    .update({
+                      families: [...(pObj.families || []), nfamHandle],
+                    })
+                    .eq("handle", targetMotherHandle);
+                }
+              }
+            }
+          } else {
+            updates.parent_families = [];
+          }
+        }
+
+        // 2. Spouse relationship changes
+        let oldSpouseHandle = "";
+        if (editPerson.families?.length > 0) {
+          const f = families.find((f) => f.handle === editPerson.families[0]);
+          if (f)
+            oldSpouseHandle =
+              f.father_handle === editPerson.handle
+                ? f.mother_handle || ""
+                : f.father_handle || "";
+        }
+        const targetSpouseHandle = !form.is_patrilineal
+          ? form.spouse_handle
+          : oldSpouseHandle; // Preserve old spouse if patrilineal (where spouse_handle selector is hidden)
+        if (targetSpouseHandle !== oldSpouseHandle) {
+          // Skip complex cleanup of old spouse families for now, just clear the link
+          if (oldSpouseHandle && editPerson.families?.length > 0) {
+            const ofHandle = editPerson.families[0];
+            const of = families.find((f) => f.handle === ofHandle);
+            if (of) {
+              const field =
+                of.father_handle === editPerson.handle
+                  ? "father_handle"
+                  : "mother_handle";
+              await supabase
+                .from("families")
+                .update({ [field]: null })
+                .eq("handle", ofHandle);
+            }
+          }
+          // Link to new spouse
+          if (targetSpouseHandle) {
+            const { data: cf } = await supabase
+              .from("families")
+              .select("*")
+              .or(
+                `father_handle.eq.${targetSpouseHandle},mother_handle.eq.${targetSpouseHandle}`,
+              )
+              .limit(1);
+            if (cf && cf.length > 0) {
+              const fam = cf[0];
+              const field =
+                form.gender === 1 ? "father_handle" : "mother_handle";
+              if (!fam[field]) {
+                await supabase
+                  .from("families")
+                  .update({ [field]: editPerson.handle })
+                  .eq("handle", fam.handle);
+                updates.families = [fam.handle];
+              }
+            } else {
+              const nfh = `f-${targetSpouseHandle}-${Date.now()}`;
+              const sObj = personMap.get(targetSpouseHandle);
+              await supabase.from("families").insert({
+                handle: nfh,
+                father_handle:
+                  sObj?.gender === 1 ? targetSpouseHandle : editPerson.handle,
+                mother_handle:
+                  sObj?.gender === 1 ? editPerson.handle : targetSpouseHandle,
+                children: [],
+              });
+              updates.families = [nfh];
+              if (sObj)
+                await supabase
+                  .from("people")
+                  .update({ families: [...(sObj.families || []), nfh] })
+                  .eq("handle", targetSpouseHandle);
+            }
+          } else {
+            // Only clear it if we explicitly want to remove the spouse link
+            // and NOT if we are just a patrilineal member whose field is hidden
+            if (!form.is_patrilineal) {
+              updates.families = (updates.families || []).filter(
+                (fh) =>
+                  !families.find((f) => f.handle === fh)?.children?.length,
+              );
+            }
+          }
+        }
+
+        // 3. Child handles (Link Children)
+        const isMale = form.gender === 1;
+        let pFamHandle = (editPerson.families || [])[0];
+        if (form.child_handles.length > 0) {
+          if (!pFamHandle) {
+            pFamHandle = `f-${editPerson.handle}-${Date.now()}`;
+            await supabase.from("families").insert({
+              handle: pFamHandle,
+              father_handle: isMale ? editPerson.handle : null,
+              mother_handle: isMale ? null : editPerson.handle,
+              children: form.child_handles,
+            });
+            if (!updates.families?.includes(pFamHandle)) {
+              updates.families = [...(updates.families || []), pFamHandle];
+            }
+          } else {
+            await supabase
+              .from("families")
+              .update({ children: form.child_handles })
+              .eq("handle", pFamHandle);
+          }
+          // Sync children
+          for (const ch of form.child_handles) {
+            await supabase
+              .from("people")
+              .update({ parent_families: [pFamHandle] })
+              .eq("handle", ch);
+            syncGens(ch, form.generation + 1, visitedTotal);
+          }
+        }
+
+        // Apply all updates
+        for (const [h, g] of Array.from(pendingGenUpdates.entries())) {
+          if (h !== editPerson.handle)
+            await supabase
+              .from("people")
+              .update({ generation: g })
+              .eq("handle", h);
+        }
         const { error } = await supabase
           .from("people")
           .update(updates)
           .eq("handle", editPerson.handle);
-
         if (error) throw error;
-
-        setPeople((prev) =>
-          prev.map((p) =>
-            p.handle === editPerson.handle
-              ? {
-                  ...p,
-                  display_name: form.display_name.trim(),
-                  gender: form.gender,
-                  generation: form.generation,
-                  birth_year: form.birth_year
-                    ? parseInt(form.birth_year)
-                    : undefined,
-                  death_year: form.death_year
-                    ? parseInt(form.death_year)
-                    : undefined,
-                  is_living: form.is_living,
-                  is_patrilineal: form.is_patrilineal,
-                }
-              : p,
-          ),
-        );
-        closeModal();
       } else {
         // ── ADD mode ──
         const handle = `p-${Date.now()}`;
-
         const { error: pErr } = await supabase.from("people").insert({
           handle,
           display_name: form.display_name.trim(),
@@ -250,155 +608,154 @@ export default function AdminPeoplePage() {
           families: [],
           parent_families: [],
         });
-
         if (pErr) throw pErr;
 
-        // ── Gán vào con của người cha (nếu có) ──
-        if (form.parent_handle) {
-          const parentPerson = people.find(
-            (p) => p.handle === form.parent_handle,
-          );
-          if (parentPerson) {
-            // Find existing family of parent
-            const { data: famData } = await supabase
-              .from("families")
-              .select("handle, children, father_handle, mother_handle")
-              .or(
-                `father_handle.eq.${form.parent_handle},mother_handle.eq.${form.parent_handle}`,
-              )
-              .limit(1);
+        // Parent linkage (Father & Mother)
+        if (form.parent_handle || form.mother_handle) {
+          // Find existing family for this couple
+          let query = supabase.from("families").select("*");
+          if (form.parent_handle)
+            query = query.eq("father_handle", form.parent_handle);
+          else query = query.is("father_handle", null);
 
-            if (famData && famData.length > 0) {
-              // Add to existing family
-              const fam = famData[0];
-              const newChildren = [...(fam.children as string[]), handle];
+          if (form.mother_handle)
+            query = query.eq("mother_handle", form.mother_handle);
+          else query = query.is("mother_handle", null);
+
+          const { data: nfamData } = await query.limit(1);
+
+          if (nfamData && nfamData.length > 0) {
+            const nfam = nfamData[0];
+            await supabase
+              .from("families")
+              .update({ children: [...(nfam.children || []), handle] })
+              .eq("handle", nfam.handle);
+            await supabase
+              .from("people")
+              .update({ parent_families: [nfam.handle] })
+              .eq("handle", handle);
+          } else {
+            const baseHandle = form.parent_handle || form.mother_handle;
+            const nfHandle = `f-${baseHandle}-${Date.now()}`;
+            await supabase.from("families").insert({
+              handle: nfHandle,
+              father_handle: form.parent_handle || null,
+              mother_handle: form.mother_handle || null,
+              children: [handle],
+            });
+            await supabase
+              .from("people")
+              .update({ parent_families: [nfHandle] })
+              .eq("handle", handle);
+
+            if (form.parent_handle) {
+              const pObj = personMap.get(form.parent_handle);
+              if (pObj)
+                await supabase
+                  .from("people")
+                  .update({ families: [...(pObj.families || []), nfHandle] })
+                  .eq("handle", form.parent_handle);
+            }
+            if (form.mother_handle) {
+              const pObj = personMap.get(form.mother_handle);
+              if (pObj)
+                await supabase
+                  .from("people")
+                  .update({ families: [...(pObj.families || []), nfHandle] })
+                  .eq("handle", form.mother_handle);
+            }
+          }
+        }
+
+        // Spouse linkage
+        if (!form.is_patrilineal && form.spouse_handle) {
+          const { data: cf } = await supabase
+            .from("families")
+            .select("*")
+            .or(
+              `father_handle.eq.${form.spouse_handle},mother_handle.eq.${form.spouse_handle}`,
+            )
+            .limit(1);
+          if (cf && cf.length > 0) {
+            const fam = cf[0];
+            const field = form.gender === 1 ? "father_handle" : "mother_handle";
+            if (!fam[field]) {
               await supabase
                 .from("families")
-                .update({ children: newChildren })
+                .update({ [field]: handle })
                 .eq("handle", fam.handle);
-              // Update child's parent_families
               await supabase
                 .from("people")
-                .update({ parent_families: [fam.handle] })
-                .eq("handle", handle);
-            } else {
-              // Create new family for parent
-              const familyHandle = `f-${form.parent_handle}-${Date.now()}`;
-              const isMale = parentPerson.gender === 1;
-              await supabase.from("families").insert({
-                handle: familyHandle,
-                father_handle: isMale ? form.parent_handle : null,
-                mother_handle: isMale ? null : form.parent_handle,
-                children: [handle],
-              });
-              // Update child's parent_families
-              await supabase
-                .from("people")
-                .update({ parent_families: [familyHandle] })
+                .update({ families: [fam.handle] })
                 .eq("handle", handle);
             }
-          }
-        }
-
-        // ── Gán làm vợ/chồng (ngoại tộc) ──
-        if (!form.is_patrilineal && form.spouse_handle) {
-          const spousePerson = people.find(
-            (p) => p.handle === form.spouse_handle,
-          );
-          if (spousePerson) {
-            // Look for an existing couple family (no children needed)
-            const { data: coupleFam } = await supabase
-              .from("families")
-              .select("handle, father_handle, mother_handle, children")
-              .or(
-                `father_handle.eq.${form.spouse_handle},mother_handle.eq.${form.spouse_handle}`,
-              )
-              .limit(1);
-
-            if (coupleFam && coupleFam.length > 0) {
-              // Update existing family: add this person as missing spouse role
-              const fam = coupleFam[0];
-              const isNewMale = form.gender === 1;
-              const updates: Record<string, string> = {};
-              if (!fam.father_handle && isNewMale)
-                updates.father_handle = handle;
-              else if (!fam.mother_handle && !isNewMale)
-                updates.mother_handle = handle;
-              else {
-                // Both slots taken — create a new couple family
-                const newFamHandle = `f-${form.spouse_handle}-${handle}-${Date.now()}`;
-                const isSpouseMale = spousePerson.gender === 1;
-                await supabase.from("families").insert({
-                  handle: newFamHandle,
-                  father_handle: isSpouseMale ? form.spouse_handle : handle,
-                  mother_handle: isSpouseMale ? handle : form.spouse_handle,
-                  children: [],
-                });
-                // Update both persons' families arrays
-                await supabase
-                  .from("people")
-                  .update({
-                    families: [...(spousePerson.families ?? []), newFamHandle],
-                  })
-                  .eq("handle", form.spouse_handle);
-                await supabase
-                  .from("people")
-                  .update({ families: [newFamHandle] })
-                  .eq("handle", handle);
-              }
-              if (Object.keys(updates).length > 0) {
-                await supabase
-                  .from("families")
-                  .update(updates)
-                  .eq("handle", fam.handle);
-                // Update new spouse's families array
-                await supabase
-                  .from("people")
-                  .update({ families: [fam.handle] })
-                  .eq("handle", handle);
-              }
-            } else {
-              // No family yet: create couple family
-              const famHandle = `f-${form.spouse_handle}-${handle}-${Date.now()}`;
-              const isSpouseMale = spousePerson.gender === 1;
-              await supabase.from("families").insert({
-                handle: famHandle,
-                father_handle: isSpouseMale ? form.spouse_handle : handle,
-                mother_handle: isSpouseMale ? handle : form.spouse_handle,
-                children: [],
-              });
-              // Update both persons' families arrays
+          } else {
+            const nfh = `f-${form.spouse_handle}-${Date.now()}`;
+            const sObj = personMap.get(form.spouse_handle);
+            await supabase.from("families").insert({
+              handle: nfh,
+              father_handle: sObj?.gender === 1 ? form.spouse_handle : handle,
+              mother_handle: sObj?.gender === 1 ? handle : form.spouse_handle,
+              children: [],
+            });
+            await supabase
+              .from("people")
+              .update({ families: [nfh] })
+              .eq("handle", handle);
+            if (sObj)
               await supabase
                 .from("people")
-                .update({
-                  families: [...(spousePerson.families ?? []), famHandle],
-                })
+                .update({ families: [...(sObj.families || []), nfh] })
                 .eq("handle", form.spouse_handle);
-              await supabase
-                .from("people")
-                .update({ families: [famHandle] })
-                .eq("handle", handle);
-              // Auto-fill the generation from spouse if not set
-              if (!form.birth_year) {
-                await supabase
-                  .from("people")
-                  .update({ generation: spousePerson.generation })
-                  .eq("handle", handle);
-              }
-            }
           }
         }
 
-        // Refresh list
-        await fetchPeople();
-        closeModal();
+        // Child linkage (Xây ngược)
+        if (form.child_handles.length > 0) {
+          const nfamHandle = `f-${handle}-${Date.now()}`;
+          const isMaleAdd = form.gender === 1;
+          await supabase.from("families").insert({
+            handle: nfamHandle,
+            father_handle: isMaleAdd ? handle : null,
+            mother_handle: isMaleAdd ? null : handle,
+            children: form.child_handles,
+          });
+          await supabase
+            .from("people")
+            .update({ families: [nfamHandle] })
+            .eq("handle", handle);
+          for (const ch of form.child_handles) {
+            await supabase
+              .from("people")
+              .update({
+                parent_families: [nfamHandle],
+                generation: form.generation + 1,
+              })
+              .eq("handle", ch);
+            const visited = new Set<string>();
+            visited.add(handle);
+            syncGens(ch, form.generation + 1, visited);
+            // Apply nested updates for child's branch in ADD mode
+            for (const [ah, ag] of Array.from(pendingGenUpdates.entries())) {
+              if (ah !== handle)
+                await supabase
+                  .from("people")
+                  .update({ generation: ag })
+                  .eq("handle", ah);
+            }
+          }
+        }
       }
+
+      await fetchPeople();
+      closeModal();
     } catch (err: unknown) {
       setFormError(
         `Lỗi: ${err instanceof Error ? err.message : "Lỗi không xác định"}`,
       );
     } finally {
       setSaving(false);
+      await cleanupFamilies();
     }
   };
 
@@ -448,6 +805,13 @@ export default function AdminPeoplePage() {
             disabled={loading}
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleManualCleanup}
+            disabled={loading}
+          >
+            Dọn dẹp
           </Button>
           <Button onClick={openAddModal}>
             <Plus className="mr-2 h-4 w-4" />
@@ -633,7 +997,7 @@ export default function AdminPeoplePage() {
                       setForm((f) => ({
                         ...f,
                         gender: parseInt(e.target.value),
-                        is_patrilineal: parseInt(e.target.value) === 1,
+                        // Keep is_patrilineal as is, user can change it manually if needed
                       }))
                     }
                   >
@@ -721,12 +1085,10 @@ export default function AdminPeoplePage() {
                 </div>
               </div>
 
-              {/* Gán cha (chỉ khi thêm mới và là chính tộc) */}
-              {!editPerson && form.is_patrilineal && (
+              {/* Gán cha mẹ (hiển thị cho tất cả thành viên, bao gồm cả cháu ngoại) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">
-                    Gán vào con của (tùy chọn)
-                  </label>
+                  <label className="text-sm font-medium">Chọn cha</label>
                   <select
                     className="w-full border rounded-md px-3 py-2 text-sm bg-background"
                     value={form.parent_handle}
@@ -741,9 +1103,12 @@ export default function AdminPeoplePage() {
                       }))
                     }
                   >
-                    <option value="">— Không chọn (thành viên gốc) —</option>
+                    <option value="">— Không chọn (chưa rõ cha) —</option>
                     {people
-                      .filter((p) => p.gender === 1)
+                      .filter(
+                        (p) =>
+                          p.gender === 1 && p.handle !== editPerson?.handle,
+                      )
                       .sort((a, b) => a.generation - b.generation)
                       .map((p) => (
                         <option key={p.handle} value={p.handle}>
@@ -751,14 +1116,45 @@ export default function AdminPeoplePage() {
                         </option>
                       ))}
                   </select>
-                  <p className="text-xs text-muted-foreground">
-                    Chọn người cha để gán thành viên mới vào trong cây gia phả.
-                  </p>
                 </div>
-              )}
 
-              {/* Gán vợ/chồng (chỉ khi ngoại tộc và thêm mới) */}
-              {!editPerson && !form.is_patrilineal && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Chọn mẹ</label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                    value={form.mother_handle}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        mother_handle: e.target.value,
+                        generation:
+                          e.target.value && !f.parent_handle
+                            ? (people.find((p) => p.handle === e.target.value)
+                                ?.generation || 0) + 1
+                            : f.generation,
+                      }))
+                    }
+                  >
+                    <option value="">— Không chọn (chưa rõ mẹ) —</option>
+                    {people
+                      .filter(
+                        (p) =>
+                          p.gender === 2 &&
+                          p.is_patrilineal &&
+                          p.handle !== editPerson?.handle,
+                      )
+                      .sort((a, b) => a.generation - b.generation)
+                      .map((p) => (
+                        <option key={p.handle} value={p.handle}>
+                          Đời {p.generation} · {p.display_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Gán vợ/chồng (chỉ khi ngoại tộc) */}
+              {!form.is_patrilineal && (
                 <div className="space-y-1.5 rounded-lg border border-pink-200 bg-pink-50/50 dark:bg-pink-950/20 dark:border-pink-800 px-3 py-3">
                   <label className="text-sm font-medium flex items-center gap-1.5">
                     <span>❤</span>
@@ -781,19 +1177,82 @@ export default function AdminPeoplePage() {
                       }));
                     }}
                   >
-                    <option value="">— Không chọn —</option>
+                    <option value="">— Không chọn (độc thân) —</option>
                     {people
-                      .filter((p) => p.is_patrilineal)
+                      .filter(
+                        (p) =>
+                          p.is_patrilineal && p.handle !== editPerson?.handle,
+                      )
                       .sort((a, b) => a.generation - b.generation)
                       .map((p) => (
                         <option key={p.handle} value={p.handle}>
-                          Đời {p.generation} · {p.display_name}{" "}
-                          {p.gender === 1 ? "(Nam)" : "(Nữ)"}
+                          Đời {p.generation} · {p.display_name}
                         </option>
                       ))}
                   </select>
                 </div>
               )}
+
+              {/* Gán con (Gán ngược) */}
+              <div className="space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/30 dark:bg-indigo-950/10 dark:border-indigo-900 px-3 py-3">
+                <label className="text-sm font-medium flex items-center gap-1.5 text-indigo-700 dark:text-indigo-400">
+                  <RefreshCw className="h-4 w-4" />
+                  Chọn các con
+                </label>
+                <div className="max-h-32 overflow-y-auto border rounded bg-background p-2 space-y-1">
+                  {people
+                    .filter(
+                      (p) =>
+                        p.handle !== editPerson?.handle &&
+                        p.generation === Number(form.generation) + 1 &&
+                        ((p.parent_families?.length ?? 0) === 0 ||
+                          form.child_handles.includes(p.handle)),
+                    )
+                    .sort((a, b) => a.generation - b.generation)
+                    .map((p) => (
+                      <div
+                        key={p.handle}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          id={`child-${p.handle}`}
+                          className="rounded border-gray-300"
+                          checked={form.child_handles.includes(p.handle)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setForm((f) => ({
+                              ...f,
+                              child_handles: checked
+                                ? [...f.child_handles, p.handle]
+                                : f.child_handles.filter((h) => h !== p.handle),
+                            }));
+                          }}
+                        />
+                        <label
+                          htmlFor={`child-${p.handle}`}
+                          className="cursor-pointer"
+                        >
+                          Đời {p.generation} · {p.display_name}
+                        </label>
+                      </div>
+                    ))}
+                  {people.filter(
+                    (p) =>
+                      p.handle !== editPerson?.handle &&
+                      p.generation === Number(form.generation) + 1 &&
+                      ((p.parent_families?.length ?? 0) === 0 ||
+                        form.child_handles.includes(p.handle)),
+                  ).length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      Không có thành viên ở đời thấp hơn
+                    </p>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Chọn các thành viên hiện có để gán họ làm con của người này.
+                </p>
+              </div>
 
               {/* Error */}
               {formError && (
