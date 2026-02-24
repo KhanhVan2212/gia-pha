@@ -2478,7 +2478,7 @@ function EditorPanel({
           {/* Editable person info */}
           <div className="p-3 border-b space-y-2">
             <p className="text-xs text-muted-foreground">
-              Đời {(person as any).generation ?? "?"} · {person.handle}
+              Đời {(person as any).generation ?? "?"} 
             </p>
             {parentPerson && (
               <p className="text-xs text-muted-foreground">
