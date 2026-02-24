@@ -1667,7 +1667,7 @@ export default function TreeViewPage() {
       </div>
 
       {/* Legend */}
-      <div className="flex gap-3 text-[10px] text-muted-foreground pt-1.5 px-1 flex-wrap">
+      <div className="flex gap-3 text-[10px] sm:text-[14px] text-muted-foreground pt-1.5 px-1 flex-wrap">
         <span className="flex items-center gap-1">
           <span className="w-2.5 h-2.5 rounded-sm bg-blue-100 border border-blue-400" />{" "}
           Nam (chính tộc)
