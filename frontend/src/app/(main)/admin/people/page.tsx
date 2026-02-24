@@ -43,6 +43,7 @@ interface Person {
   families: string[];
   parent_families: string[];
   created_at: string;
+  updated_at?: string;
 }
 
 interface Family {
@@ -328,8 +329,8 @@ export default function AdminPeoplePage() {
           display_name: form.display_name.trim(),
           gender: form.gender,
           generation: form.generation,
-          birth_year: form.birth_year ? parseInt(form.birth_year) : null,
-          death_year: form.death_year ? parseInt(form.death_year) : null,
+          birth_year: form.birth_year ? parseInt(form.birth_year) : undefined,
+          death_year: form.death_year ? parseInt(form.death_year) : undefined,
           is_living: form.is_living,
           is_patrilineal: form.is_patrilineal,
           families: editPerson.families || [],
@@ -600,8 +601,8 @@ export default function AdminPeoplePage() {
           display_name: form.display_name.trim(),
           gender: form.gender,
           generation: form.generation,
-          birth_year: form.birth_year ? parseInt(form.birth_year) : null,
-          death_year: form.death_year ? parseInt(form.death_year) : null,
+          birth_year: form.birth_year ? parseInt(form.birth_year) : undefined,
+          death_year: form.death_year ? parseInt(form.death_year) : undefined,
           is_living: form.is_living,
           is_patrilineal: form.is_patrilineal,
           is_privacy_filtered: false,
