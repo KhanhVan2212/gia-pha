@@ -362,6 +362,11 @@ export default function TreeViewPage() {
 
   // Transform state
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
+
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, startTx: 0, startTy: 0 });
   const pinchRef = useRef({ initialDist: 0, initialScale: 1 });
@@ -860,61 +865,77 @@ export default function TreeViewPage() {
         dragRef.current = {
           startX: t.clientX,
           startY: t.clientY,
-          startTx: transform.x,
-          startTy: transform.y,
+          startTx: transformRef.current.x,
+          startTy: transformRef.current.y,
         };
       } else if (e.touches.length === 2) {
         const dist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY,
         );
-        pinchRef.current = { initialDist: dist, initialScale: transform.scale };
+        pinchRef.current = {
+          initialDist: dist,
+          initialScale: transformRef.current.scale,
+        };
       }
       lastTouches = Array.from(e.touches);
     };
 
+    let rafId: number | null = null;
+
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 1 && touching) {
-        const t = e.touches[0];
-        const dx = t.clientX - dragRef.current.startX;
-        const dy = t.clientY - dragRef.current.startY;
-        setTransform((prev) => ({
-          ...prev,
-          x: dragRef.current.startTx + dx,
-          y: dragRef.current.startTy + dy,
-        }));
-      } else if (e.touches.length === 2) {
-        const dist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY,
-        );
-        const ratio = dist / pinchRef.current.initialDist;
-        const newScale = Math.min(
-          Math.max(pinchRef.current.initialScale * ratio, 0.15),
-          3,
-        );
+      // Always prevent default to prevent scrolling while interacting with the tree
+      if (e.cancelable) e.preventDefault();
 
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        const rect = el.getBoundingClientRect();
-        const mx = midX - rect.left;
-        const my = midY - rect.top;
+      if (rafId) return; // Throttle to screen refresh rate
 
-        setTransform((prev) => {
-          const r = newScale / prev.scale;
-          return {
-            scale: newScale,
-            x: mx - (mx - prev.x) * r,
-            y: my - (my - prev.y) * r,
-          };
-        });
-      }
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (e.touches.length === 1 && touching) {
+          const t = e.touches[0];
+          const dx = t.clientX - dragRef.current.startX;
+          const dy = t.clientY - dragRef.current.startY;
+          setTransform((prev) => ({
+            ...prev,
+            x: dragRef.current.startTx + dx,
+            y: dragRef.current.startTy + dy,
+          }));
+        } else if (e.touches.length === 2) {
+          const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY,
+          );
+          const ratio = dist / pinchRef.current.initialDist;
+          const newScale = Math.min(
+            Math.max(pinchRef.current.initialScale * ratio, 0.15),
+            3,
+          );
+
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const rect = el.getBoundingClientRect();
+          const mx = midX - rect.left;
+          const my = midY - rect.top;
+
+          setTransform((prev) => {
+            const r = newScale / prev.scale;
+            return {
+              scale: newScale,
+              x: mx - (mx - prev.x) * r,
+              y: my - (my - prev.y) * r,
+            };
+          });
+        }
+      });
       lastTouches = Array.from(e.touches);
     };
 
     const onTouchEnd = () => {
       touching = false;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: false });
@@ -925,7 +946,7 @@ export default function TreeViewPage() {
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
-  }, [transform.x, transform.y, transform.scale]);
+  }, []); // Stable handlers
 
   // Pan to person
   const panToPerson = useCallback(
@@ -1160,7 +1181,7 @@ export default function TreeViewPage() {
       <div className="flex-1 flex gap-0 min-h-0">
         <div
           ref={viewportRef}
-          className="flex-1 relative overflow-hidden rounded-xl border-2 bg-gradient-to-br from-background to-muted/30 cursor-grab active:cursor-grabbing select-none"
+          className="flex-1 relative overflow-hidden rounded-xl border-2 bg-gradient-to-br from-background to-muted/30 cursor-grab active:cursor-grabbing select-none touch-none"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1179,7 +1200,9 @@ export default function TreeViewPage() {
             layout && (
               <div
                 style={{
-                  transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+                  transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
+                  willChange: "transform",
+                  backfaceVisibility: "hidden",
                   transformOrigin: "0 0",
                   width: layout.width,
                   height: layout.height,
@@ -1233,7 +1256,7 @@ export default function TreeViewPage() {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       filter="url(#shadow)"
-                      className="transition-all duration-300"
+                      className="transition-colors duration-300"
                     />
                   )}
                   {couplePaths && (
