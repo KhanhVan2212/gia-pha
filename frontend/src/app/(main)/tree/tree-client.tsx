@@ -1007,10 +1007,10 @@ export default function TreeViewPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 px-1 pb-2">
         <div>
-          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <TreePine className="h-5 w-5" /> Cây gia phả
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
+            <TreePine className="h-8 w-8" /> Cây gia phả
           </h1>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-muted-foreground mt-2 max-w-xl">
             {layout ? `${layout.nodes.length} thành viên` : "Đang tải..."}
             {viewMode !== "full" && focusPerson && (
               <span className="ml-1 text-blue-500">

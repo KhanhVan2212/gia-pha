@@ -2,7 +2,8 @@
 -- 🌳 Gia Phả Điện Tử — Database Setup (Bản Hợp Nhất Hoàn Chỉnh)
 -- ============================================================
 -- Chạy file này trong: Supabase Dashboard → SQL Editor
--- File này bao gồm toàn bộ cập nhật về: Phê duyệt, Bình luận, Tên người dùng
+-- File này bao gồm toàn bộ cập nhật: Cấu trúc cơ bản, Auth,
+-- Nội dung, Tương tác, Media, Profile, Feed, RLS
 -- ============================================================
 
 
@@ -87,14 +88,19 @@ CREATE TABLE IF NOT EXISTS profiles (
     CONSTRAINT profiles_role_check CHECK (role IN ('admin', 'editor', 'archivist', 'member', 'guest', 'viewer'))
 );
 
--- Hàm kiểm tra Admin tập trung (Tránh lỗi RLS subquery)
+-- Bổ sung cột liên hệ và avatar (idempotent)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone_number TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+-- Hàm kiểm tra Admin tập trung (phiên bản cải tiến)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN (
-        SELECT role = 'admin' 
-        FROM public.profiles 
-        WHERE id = auth.uid()
+    RETURN EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = auth.uid() AND role = 'admin'
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -107,7 +113,6 @@ BEGIN
     VALUES (
         NEW.id,
         NEW.email,
-        -- Mặc định là member, chỉ Admin chỉ định mới thành admin
         'member',
         'active',
         COALESCE(NEW.raw_user_meta_data->>'display_name', NEW.email)
@@ -142,6 +147,19 @@ CREATE TABLE IF NOT EXISTS posts (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Thêm cột media (JSONB) vào posts nếu chưa có
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='posts'
+        AND column_name='media'
+    ) THEN
+        ALTER TABLE public.posts ADD COLUMN media JSONB DEFAULT '[]'::jsonb;
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
 CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
 
@@ -167,7 +185,7 @@ CREATE INDEX IF NOT EXISTS idx_contributions_status ON contributions(status);
 
 
 -- ╔══════════════════════════════════════════════════════════╗
--- ║  4. TƯƠNG TÁC: comments + notifications                 ║
+-- ║  4. TƯƠNG TÁC: events + comments + notifications        ║
 -- ╚══════════════════════════════════════════════════════════╝
 
 CREATE TABLE IF NOT EXISTS events (
@@ -180,8 +198,8 @@ CREATE TABLE IF NOT EXISTS events (
     type TEXT NOT NULL DEFAULT 'MEETING',
     is_recurring BOOLEAN DEFAULT false,
     creator_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    author_name TEXT,                        -- Tên người tạo
-    status TEXT NOT NULL DEFAULT 'pending', -- Mặc định chờ duyệt
+    author_name TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -189,23 +207,18 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_at);
 
--- Cập nhật bảng comments (Đã có sẵn ở trên, giữ nguyên)
-
--- Cập nhật cột nếu bảng đã tồn tại từ trước (Idempotent)
-DO $$ 
+-- Cập nhật bảng comments (Idempotent)
+DO $$
 BEGIN
-    -- Thêm các cột nếu thiếu
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='comments' AND column_name='post_id') THEN
         ALTER TABLE public.comments ADD COLUMN post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='comments' AND column_name='author_name') THEN
         ALTER TABLE public.comments ADD COLUMN author_name TEXT;
     END IF;
-    -- Đổi tên body -> content nếu còn
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='comments' AND column_name='body') THEN
         ALTER TABLE public.comments RENAME COLUMN body TO content;
     END IF;
-    -- Gỡ bỏ bắt buộc person_handle
     ALTER TABLE public.comments ALTER COLUMN person_handle DROP NOT NULL;
 END $$;
 
@@ -222,7 +235,51 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 
 -- ╔══════════════════════════════════════════════════════════╗
--- ║  5. ROW LEVEL SECURITY (RLS): bảo mật dữ liệu           ║
+-- ║  5. LƯỢT THÍCH BÀI VIẾT: post_likes                     ║
+-- ╚══════════════════════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS public.post_likes (
+    id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+    post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT post_likes_post_user_unique UNIQUE (post_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS post_likes_post_id_idx ON public.post_likes(post_id);
+CREATE INDEX IF NOT EXISTS post_likes_user_id_idx ON public.post_likes(user_id);
+
+
+-- ╔══════════════════════════════════════════════════════════╗
+-- ║  6. THƯ VIỆN MEDIA (Cloudinary)                          ║
+-- ╚══════════════════════════════════════════════════════════╝
+
+-- Tạo bảng media (sẽ xóa và tạo lại nếu cần đồng nhất)
+CREATE TABLE IF NOT EXISTS public.media (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    file_name TEXT NOT NULL,
+    mime_type TEXT,
+    file_size BIGINT,
+    url TEXT,
+    public_id TEXT,
+    width INTEGER,
+    height INTEGER,
+    title TEXT,
+    description TEXT,
+    state TEXT NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'PUBLISHED', 'REJECTED')),
+    uploader_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Đổi FK uploader_id trỏ đến profiles thay vì auth.users (để Supabase tự join được)
+ALTER TABLE public.media DROP CONSTRAINT IF EXISTS media_uploader_id_fkey;
+ALTER TABLE public.media ADD CONSTRAINT media_uploader_id_fkey
+    FOREIGN KEY (uploader_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+-- ╔══════════════════════════════════════════════════════════╗
+-- ║  7. ROW LEVEL SECURITY (RLS)                             ║
 -- ╚══════════════════════════════════════════════════════════╝
 
 -- Enable RLS
@@ -233,10 +290,24 @@ ALTER TABLE contributions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.post_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
 
--- Posts: Viewer xem Published, Admin/Chủ sở hữu xem tất cả
+-- --- Profiles ---
+DROP POLICY IF EXISTS "anyone can read profiles" ON profiles;
+CREATE POLICY "anyone can read profiles" ON profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "users or admin can update profile" ON profiles;
+CREATE POLICY "users or admin can update profile" ON profiles
+    FOR UPDATE USING (auth.uid() = id OR is_admin());
+
+DROP POLICY IF EXISTS "users can update own profile" ON profiles;
+CREATE POLICY "users can update own profile" ON public.profiles
+    FOR UPDATE USING (auth.uid() = id);
+
+-- --- Posts ---
 DROP POLICY IF EXISTS "anyone can read published posts" ON posts;
-CREATE POLICY "anyone can read published posts" ON posts 
+CREATE POLICY "anyone can read published posts" ON posts
     FOR SELECT USING (status = 'published' OR auth.uid() = author_id OR is_admin());
 
 DROP POLICY IF EXISTS "users can insert posts" ON posts;
@@ -246,11 +317,11 @@ DROP POLICY IF EXISTS "admin or owner can manage posts" ON posts;
 CREATE POLICY "admin or owner can manage posts" ON posts
     FOR ALL USING (auth.uid() = author_id OR is_admin());
 
--- Events: Viewer xem Published, Admin/Chủ sở hữu xem tất cả
+-- --- Events ---
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "anyone can read published events" ON events;
-CREATE POLICY "anyone can read published events" ON events 
+CREATE POLICY "anyone can read published events" ON events
     FOR SELECT USING (status = 'published' OR auth.uid() = creator_id OR is_admin());
 
 DROP POLICY IF EXISTS "users can insert events" ON events;
@@ -259,6 +330,8 @@ CREATE POLICY "users can insert events" ON events FOR INSERT WITH CHECK (auth.ui
 DROP POLICY IF EXISTS "admin or owner can manage events" ON events;
 CREATE POLICY "admin or owner can manage events" ON events
     FOR ALL USING (auth.uid() = creator_id OR is_admin());
+
+-- --- Comments ---
 DROP POLICY IF EXISTS "anyone can read comments" ON comments;
 CREATE POLICY "anyone can read comments" ON comments FOR SELECT USING (true);
 
@@ -269,36 +342,58 @@ DROP POLICY IF EXISTS "owner or admin can delete comments" ON comments;
 CREATE POLICY "owner or admin can delete comments" ON comments
     FOR DELETE USING (author_id = auth.uid() OR is_admin());
 
--- Profiles: Công khai xem, chủ sở hữu hoặc admin cập nhật
-DROP POLICY IF EXISTS "anyone can read profiles" ON profiles;
-CREATE POLICY "anyone can read profiles" ON profiles FOR SELECT USING (true);
+-- --- Post Likes ---
+DROP POLICY IF EXISTS "Cho phép tất cả mọi người xem lượt Thích" ON public.post_likes;
+CREATE POLICY "Cho phép tất cả mọi người xem lượt Thích"
+ON public.post_likes FOR SELECT USING (true);
 
-DROP POLICY IF EXISTS "users or admin can update profile" ON profiles;
-CREATE POLICY "users or admin can update profile" ON profiles
-    FOR UPDATE USING (auth.uid() = id OR is_admin());
+DROP POLICY IF EXISTS "Người dùng chỉ được Thích bằng tài khoản của mình" ON public.post_likes;
+CREATE POLICY "Người dùng chỉ được Thích bằng tài khoản của mình"
+ON public.post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- People & Families
+DROP POLICY IF EXISTS "Người dùng chỉ được xóa lượt Thích của mình" ON public.post_likes;
+CREATE POLICY "Người dùng chỉ được xóa lượt Thích của mình"
+ON public.post_likes FOR DELETE USING (auth.uid() = user_id);
+
+-- --- Media ---
+DROP POLICY IF EXISTS "anyone can read published media" ON public.media;
+CREATE POLICY "anyone can read published media" ON public.media
+    FOR SELECT USING (
+        state = 'PUBLISHED'
+        OR auth.uid() = uploader_id
+        OR public.is_admin()
+    );
+
+DROP POLICY IF EXISTS "authenticated users can insert media" ON public.media;
+CREATE POLICY "authenticated users can insert media" ON public.media
+    FOR INSERT WITH CHECK (auth.uid() = uploader_id);
+
+DROP POLICY IF EXISTS "admin can update media" ON public.media;
+CREATE POLICY "admin can update media" ON public.media
+    FOR UPDATE USING (public.is_admin());
+
+-- --- People & Families ---
 DROP POLICY IF EXISTS "anyone can read people" ON people;
 CREATE POLICY "anyone can read people" ON people FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "authenticated can update people" ON people;
-CREATE POLICY "authenticated can update people" ON people 
+CREATE POLICY "authenticated can update people" ON people
     FOR UPDATE USING (is_admin() OR (auth.role() = 'authenticated' AND NOT is_privacy_filtered));
 
 DROP POLICY IF EXISTS "admin can manage people" ON people;
-CREATE POLICY "admin can manage people" ON people 
+CREATE POLICY "admin can manage people" ON people
     FOR ALL USING (is_admin());
 
 DROP POLICY IF EXISTS "anyone can read families" ON families;
 CREATE POLICY "anyone can read families" ON families FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "admin can manage families" ON families;
-CREATE POLICY "admin can manage families" ON families 
+CREATE POLICY "admin can manage families" ON families
     FOR ALL USING (is_admin());
 
 
 -- ╔══════════════════════════════════════════════════════════╗
--- ║  6. LÀM MỚI HỆ THỐNG                                    ║
+-- ║  8. LÀM MỚI HỆ THỐNG                                    ║
 -- ╚══════════════════════════════════════════════════════════╝
 
 -- Refresh Schema Cache

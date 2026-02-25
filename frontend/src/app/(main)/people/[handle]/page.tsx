@@ -7,7 +7,7 @@ import {
   ArrowLeft,
   User,
   Heart,
-  Image,
+  Image as ImageIcon,
   FileText,
   History,
   Lock,
@@ -17,20 +17,25 @@ import {
   GraduationCap,
   Tag,
   MessageCircle,
+  Calendar,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { zodiacYear } from "@/lib/genealogy-types";
 import type { PersonDetail } from "@/lib/genealogy-types";
 import { CommentSection } from "@/components/comment-section";
+import { cn } from "@/lib/utils";
 
 interface FamilyMember {
   handle: string;
   displayName: string;
-  relType: string; // 'father', 'mother', 'child', 'spouse'
+  relType: string;
 }
 
 export default function PersonProfilePage() {
@@ -39,6 +44,10 @@ export default function PersonProfilePage() {
   const handle = params.handle as string;
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [familyDetails, setFamilyDetails] = useState<{
+    parents: FamilyMember[];
+    families: { handle: string; members: FamilyMember[] }[];
+  }>({ parents: [], families: [] });
 
   useEffect(() => {
     const fetchPerson = async () => {
@@ -49,590 +58,561 @@ export default function PersonProfilePage() {
           .select("*")
           .eq("handle", handle)
           .single();
-        if (!error && data) {
-          const row = data as Record<string, unknown>;
-          const displayName = row.display_name as string;
 
-          // Auto-extract name if missing
-          let surname = row.surname as string;
-          let firstName = row.first_name as string;
-          if (!surname && !firstName && displayName) {
-            const parts = displayName.trim().split(/\s+/);
-            if (parts.length > 1) {
-              surname = parts[0];
-              firstName = parts[parts.length - 1];
-            } else {
-              firstName = displayName;
-            }
+        if (!error && data) {
+          const row = data as any;
+          let surname = row.surname;
+          let firstName = row.first_name;
+          if (!surname && !firstName && row.display_name) {
+            const parts = row.display_name.trim().split(/\s+/);
+            surname = parts.length > 1 ? parts[0] : "";
+            firstName = parts[parts.length - 1];
           }
 
           setPerson({
-            handle: row.handle as string,
-            displayName: displayName,
-            surname: surname,
-            firstName: firstName,
-            gender: row.gender as number,
-            birthYear: row.birth_year as number | undefined,
-            deathYear: row.death_year as number | undefined,
-            generation: row.generation as number,
-            isLiving: row.is_living as boolean,
-            isPrivacyFiltered: row.is_privacy_filtered as boolean,
-            isPatrilineal: row.is_patrilineal as boolean,
-            families: (row.families as string[]) || [],
-            parentFamilies: (row.parent_families as string[]) || [],
-            phone: row.phone as string | undefined,
-            email: row.email as string | undefined,
-            currentAddress: row.current_address as string | undefined,
-            hometown: row.hometown as string | undefined,
-            occupation: row.occupation as string | undefined,
-            education: row.education as string | undefined,
-            notes: row.notes as string | undefined,
-            birthDate: row.birth_date as string | undefined,
-            birthPlace: row.birth_place as string | undefined,
-            deathDate: row.death_date as string | undefined,
-            deathPlace: row.death_place as string | undefined,
+            ...row,
+            displayName: row.display_name,
+            surname,
+            firstName,
+            isLiving: row.is_living,
+            isPrivacyFiltered: row.is_privacy_filtered,
+            parentFamilies: row.parent_families || [],
+            families: row.families || [],
           } as PersonDetail);
         }
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchPerson();
   }, [handle]);
 
-  const [familyDetails, setFamilyDetails] = useState<{
-    parents: FamilyMember[];
-    families: { handle: string; members: FamilyMember[] }[];
-  }>({ parents: [], families: [] });
-
   useEffect(() => {
     if (!person) return;
-
     const fetchFamilyDetails = async () => {
       try {
         const { supabase } = await import("@/lib/supabase");
-
-        // 1. Fetch parent families
         const parentsArr: FamilyMember[] = [];
-        if (person.parentFamilies && person.parentFamilies.length > 0) {
+        if ((person.parentFamilies?.length ?? 0) > 0) {
           const { data: famData } = await supabase
             .from("families")
-            .select("father_handle, mother_handle, handle")
+            .select("father_handle, mother_handle")
             .in("handle", person.parentFamilies || []);
 
           if (famData) {
             const pHandles = famData.flatMap((f) =>
               [f.father_handle, f.mother_handle].filter(Boolean),
             );
-            if (pHandles.length > 0) {
-              const { data: pPeople } = await supabase
-                .from("people")
-                .select("handle, display_name")
-                .in("handle", pHandles);
-
-              if (pPeople) {
-                famData.forEach((f) => {
-                  if (f.father_handle) {
-                    const p = pPeople.find(
-                      (pp) => pp.handle === f.father_handle,
-                    );
-                    if (p)
-                      parentsArr.push({
-                        handle: p.handle,
-                        displayName: p.display_name,
-                        relType: "father",
-                      });
-                  }
-                  if (f.mother_handle) {
-                    const p = pPeople.find(
-                      (pp) => pp.handle === f.mother_handle,
-                    );
-                    if (p)
-                      parentsArr.push({
-                        handle: p.handle,
-                        displayName: p.display_name,
-                        relType: "mother",
-                      });
-                  }
-                });
-              }
+            const { data: pPeople } = await supabase
+              .from("people")
+              .select("handle, display_name")
+              .in("handle", pHandles);
+            if (pPeople) {
+              famData.forEach((f) => {
+                if (f.father_handle) {
+                  const p = pPeople.find((pp) => pp.handle === f.father_handle);
+                  if (p)
+                    parentsArr.push({
+                      handle: p.handle,
+                      displayName: p.display_name,
+                      relType: "father",
+                    });
+                }
+                if (f.mother_handle) {
+                  const p = pPeople.find((pp) => pp.handle === f.mother_handle);
+                  if (p)
+                    parentsArr.push({
+                      handle: p.handle,
+                      displayName: p.display_name,
+                      relType: "mother",
+                    });
+                }
+              });
             }
           }
         }
 
-        // 2. Fetch spouse/child families
-        const detailedFamilies: { handle: string; members: FamilyMember[] }[] =
-          [];
-        if (person.families && person.families.length > 0) {
+        const detailedFamilies: any[] = [];
+        if ((person.families?.length ?? 0) > 0) {
           const { data: famData } = await supabase
             .from("families")
-            .select("handle, father_handle, mother_handle, children")
+            .select("*")
             .in("handle", person.families || []);
-
           if (famData) {
             for (const f of famData) {
-              const members: FamilyMember[] = [];
               const spouseHandle =
                 f.father_handle === person.handle
                   ? f.mother_handle
                   : f.father_handle;
-              const childrenHandles = (f.children as string[]) || [];
-
-              const allHandles = [spouseHandle, ...childrenHandles].filter(
-                Boolean,
-              ) as string[];
-              if (allHandles.length > 0) {
-                const { data: pPeople } = await supabase
-                  .from("people")
-                  .select("handle, display_name")
-                  .in("handle", allHandles);
-
-                if (pPeople) {
-                  if (spouseHandle) {
-                    const s = pPeople.find((pp) => pp.handle === spouseHandle);
-                    if (s)
-                      members.push({
-                        handle: s.handle,
-                        displayName: s.display_name,
-                        relType: "spouse",
-                      });
-                  }
-                  childrenHandles.forEach((ch) => {
-                    const c = pPeople.find((pp) => pp.handle === ch);
-                    if (c)
-                      members.push({
-                        handle: c.handle,
-                        displayName: c.display_name,
-                        relType: "child",
-                      });
-                  });
+              const childrenHandles = f.children || [];
+              const allH = [spouseHandle, ...childrenHandles].filter(Boolean);
+              const { data: pPeople } = await supabase
+                .from("people")
+                .select("handle, display_name")
+                .in("handle", allH);
+              const members: FamilyMember[] = [];
+              if (pPeople) {
+                if (spouseHandle) {
+                  const s = pPeople.find((pp) => pp.handle === spouseHandle);
+                  if (s)
+                    members.push({
+                      handle: s.handle,
+                      displayName: s.display_name,
+                      relType: "spouse",
+                    });
                 }
+                childrenHandles.forEach((ch: string) => {
+                  const c = pPeople.find((pp) => pp.handle === ch);
+                  if (c)
+                    members.push({
+                      handle: c.handle,
+                      displayName: c.display_name,
+                      relType: "child",
+                    });
+                });
               }
               detailedFamilies.push({ handle: f.handle, members });
             }
           }
         }
-
         setFamilyDetails({ parents: parentsArr, families: detailedFamilies });
       } catch (err) {
-        console.error("Error fetching family details:", err);
+        console.error(err);
       }
     };
-
     fetchFamilyDetails();
   }, [person]);
 
-  if (loading) {
+  if (loading)
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="space-y-8 animate-pulse">
+        <Skeleton className="h-48 w-full rounded-3xl" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Skeleton className="h-96 col-span-2 rounded-3xl" />
+          <Skeleton className="h-96 rounded-3xl" />
+        </div>
       </div>
     );
-  }
 
-  if (!person) {
+  if (!person)
     return (
-      <div className="text-center py-20">
-        <p className="text-muted-foreground">Không tìm thấy người này</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => router.back()}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Quay lại
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="p-4 bg-muted rounded-full mb-4">
+          <User className="h-10 w-10 text-muted-foreground" />
+        </div>
+        <h2 className="text-xl font-bold">Không tìm thấy thành viên</h2>
+        <Button variant="link" onClick={() => router.back()} className="mt-2">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Quay lại
         </Button>
       </div>
     );
-  }
 
-  const genderLabel =
-    person.gender === 1 ? "Nam" : person.gender === 2 ? "Nữ" : "Không rõ";
+  const genderColor =
+    person.gender === 1
+      ? "text-blue-600 bg-blue-50"
+      : "text-rose-600 bg-rose-50";
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              {person.displayName}
-              {person.isPrivacyFiltered && (
+    <div className="space-y-8 pb-10">
+      {/* --- HERO HEADER --- */}
+      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-primary/10 via-background to-transparent border border-primary/10 p-6 md:p-10 shadow-sm">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+            <div className={cn("p-5 rounded-3xl shadow-inner", genderColor)}>
+              <User className="h-12 w-12" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                  {person.displayName}
+                </h1>
+                {person.isPrivacyFiltered && (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-50 text-amber-600 border-amber-200 rounded-full py-1"
+                  >
+                    <Lock className="h-3 w-3 mr-1" /> Quyền riêng tư
+                  </Badge>
+                )}
                 <Badge
-                  variant="outline"
-                  className="text-amber-500 border-amber-500"
+                  className={cn(
+                    "rounded-full",
+                    person.isLiving ? "bg-emerald-500" : "bg-slate-500",
+                  )}
                 >
-                  <Lock className="h-3 w-3 mr-1" />
-                  Thông tin bị giới hạn
+                  {person.isLiving ? "Còn sống" : "Đã mất"}
                 </Badge>
-              )}
-            </h1>
-            <p className="text-muted-foreground">
-              {genderLabel}
-              {person.generation ? ` • Đời thứ ${person.generation}` : ""}
-              {person.chi ? ` • Chi ${person.chi}` : ""}
-              {person.isLiving && " • Còn sống"}
-            </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-muted-foreground font-medium">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-primary" /> Đời thứ{" "}
+                  {person.generation || "?"}
+                </span>
+                {person.chi && (
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-1 h-1 rounded-full bg-muted-foreground" />{" "}
+                    Chi {person.chi}
+                  </span>
+                )}
+                <span className="flex items-center gap-1.5">
+                  <div className="w-1 h-1 rounded-full bg-muted-foreground" />{" "}
+                  {person.gender === 1 ? "Nam giới" : "Nữ giới"}
+                </span>
+              </div>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            className="rounded-2xl shadow-sm hover:bg-white"
+            onClick={() => router.back()}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Quay lại
+          </Button>
         </div>
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-primary/10 rounded-full blur-3xl opacity-50" />
       </div>
 
-      {/* Privacy notice */}
-      {person.isPrivacyFiltered && person._privacyNote && (
-        <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-600 dark:text-amber-400">
-          🔒 {person._privacyNote}
+      {/* --- CONTENT TABS --- */}
+      <Tabs defaultValue="overview" className="w-full">
+        <div className="overflow-x-auto pb-2 scrollbar-hide">
+          <TabsList className="bg-muted/50 p-1 rounded-2xl border w-full justify-start md:justify-center h-auto">
+            <TabsTrigger
+              value="overview"
+              className="rounded-xl px-6 py-2.5 data-[state=active]:shadow-sm"
+            >
+              <User className="h-4 w-4 mr-2" /> Tổng quan
+            </TabsTrigger>
+            <TabsTrigger
+              value="relationships"
+              className="rounded-xl px-6 py-2.5 data-[state=active]:shadow-sm"
+            >
+              <Heart className="h-4 w-4 mr-2 text-rose-500" /> Quan hệ
+            </TabsTrigger>
+            <TabsTrigger
+              value="media"
+              className="rounded-xl px-6 py-2.5 data-[state=active]:shadow-sm"
+            >
+              <ImageIcon className="h-4 w-4 mr-2 text-blue-500" /> Tư liệu
+            </TabsTrigger>
+            <TabsTrigger
+              value="comments"
+              className="rounded-xl px-6 py-2.5 data-[state=active]:shadow-sm"
+            >
+              <MessageCircle className="h-4 w-4 mr-2 text-emerald-500" /> Trao
+              đổi
+            </TabsTrigger>
+          </TabsList>
         </div>
-      )}
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview" className="gap-1">
-            <User className="h-3.5 w-3.5" /> Tổng quan
-          </TabsTrigger>
-          <TabsTrigger value="relationships" className="gap-1">
-            <Heart className="h-3.5 w-3.5" /> Quan hệ
-          </TabsTrigger>
-          <TabsTrigger value="media" className="gap-1">
-            <Image className="h-3.5 w-3.5" /> Tư liệu
-          </TabsTrigger>
-          <TabsTrigger value="history" className="gap-1">
-            <History className="h-3.5 w-3.5" /> Lịch sử
-          </TabsTrigger>
-          <TabsTrigger value="comments" className="gap-1">
-            <MessageCircle className="h-3.5 w-3.5" /> Bình luận
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Overview */}
-        <TabsContent value="overview" className="space-y-4">
-          {/* Thông tin cá nhân */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <User className="h-4 w-4" /> Thông tin cá nhân
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <InfoRow label="Họ" value={person.surname || "—"} />
-              <InfoRow label="Tên" value={person.firstName || "—"} />
-              <InfoRow label="Giới tính" value={genderLabel} />
-              {person.nickName && (
-                <InfoRow label="Tên thường gọi" value={person.nickName} />
-              )}
-              <InfoRow
-                label="Ngày sinh"
-                value={
-                  person.birthDate ||
-                  (person.birthYear ? `${person.birthYear}` : "—")
-                }
-              />
-              {person.birthYear && (
-                <InfoRow
-                  label="Năm âm lịch"
-                  value={zodiacYear(person.birthYear) || "—"}
-                />
-              )}
-              <InfoRow label="Nơi sinh" value={person.birthPlace || "—"} />
-              {!person.isLiving && (
-                <>
-                  <InfoRow
-                    label="Ngày mất"
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Column */}
+          <div className="lg:col-span-2 space-y-6">
+            <TabsContent
+              value="overview"
+              className="m-0 space-y-6 outline-none"
+            >
+              <Card className="rounded-3xl border-muted shadow-sm overflow-hidden">
+                <CardHeader className="bg-muted/30 border-b">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" /> Thông tin cơ
+                    bản
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 grid gap-6 sm:grid-cols-2">
+                  <InfoItem
+                    icon={<User className="h-4 w-4" />}
+                    label="Họ và tên"
+                    value={`${person.surname} ${person.firstName}`}
+                  />
+                  <InfoItem
+                    icon={<Calendar className="h-4 w-4" />}
+                    label="Ngày sinh"
                     value={
-                      person.deathDate ||
-                      (person.deathYear ? `${person.deathYear}` : "—")
+                      person.birthDate ||
+                      (person.birthYear
+                        ? `${person.birthYear} (${zodiacYear(person.birthYear)})`
+                        : "Chưa cập nhật")
                     }
                   />
-                  <InfoRow label="Nơi mất" value={person.deathPlace || "—"} />
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Liên hệ */}
-          {(person.phone || person.email || person.zalo || person.facebook) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Phone className="h-4 w-4" /> Liên hệ
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                {person.phone && (
-                  <InfoRow label="Điện thoại" value={person.phone} />
-                )}
-                {person.email && <InfoRow label="Email" value={person.email} />}
-                {person.zalo && <InfoRow label="Zalo" value={person.zalo} />}
-                {person.facebook && (
-                  <InfoRow label="Facebook" value={person.facebook} />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Địa chỉ */}
-          {(person.hometown || person.currentAddress) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" /> Địa chỉ
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                {person.hometown && (
-                  <InfoRow label="Quê quán" value={person.hometown} />
-                )}
-                {person.currentAddress && (
-                  <InfoRow
-                    label="Nơi ở hiện tại"
-                    value={person.currentAddress}
+                  <InfoItem
+                    icon={<MapPin className="h-4 w-4" />}
+                    label="Nơi sinh"
+                    value={person.birthPlace || "Chưa rõ"}
                   />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Nghề nghiệp & Học vấn */}
-          {(person.occupation || person.company || person.education) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Briefcase className="h-4 w-4" /> Nghề nghiệp & Học vấn
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                {person.occupation && (
-                  <InfoRow label="Nghề nghiệp" value={person.occupation} />
-                )}
-                {person.company && (
-                  <InfoRow label="Nơi công tác" value={person.company} />
-                )}
-                {person.education && (
-                  <div className="flex items-start gap-2">
-                    <GraduationCap className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Học vấn
-                      </p>
-                      <p className="text-sm">{person.education}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Tiểu sử & Ghi chú */}
-          {(person.biography || person.notes) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Tiểu sử & Ghi chú
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {person.biography && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Tiểu sử
-                    </p>
-                    <p className="text-sm leading-relaxed">
-                      {person.biography}
-                    </p>
-                  </div>
-                )}
-                {person.notes && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Ghi chú
-                    </p>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {person.notes}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Tags */}
-          {person.tags && person.tags.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Tag className="h-4 w-4" /> Nhãn
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {person.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Relationships */}
-        <TabsContent value="relationships">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Quan hệ gia đình</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">
-                    Gia đình (cha/mẹ)
-                  </p>
-                  {familyDetails.parents.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {familyDetails.parents.map((m) => (
-                        <Link key={m.handle} href={`/people/${m.handle}`}>
-                          <Badge
-                            variant="outline"
-                            className="hover:bg-primary/5 transition-colors cursor-pointer py-1.5 px-3 border-blue-200 text-blue-700 bg-blue-50/30"
-                          >
-                            <span className="opacity-60 mr-1.5">
-                              {m.relType === "father" ? "Cha:" : "Mẹ:"}
-                            </span>
-                            <span className="font-semibold">
-                              {m.displayName}
-                            </span>
-                          </Badge>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Không có thông tin
-                    </p>
+                  {!person.isLiving && (
+                    <>
+                      <InfoItem
+                        icon={<Calendar className="h-4 w-4 text-rose-500" />}
+                        label="Ngày mất"
+                        value={
+                          person.deathDate ||
+                          person.deathYear?.toString() ||
+                          "—"
+                        }
+                      />
+                      <InfoItem
+                        icon={<MapPin className="h-4 w-4 text-rose-500" />}
+                        label="Nơi an nghỉ"
+                        value={person.deathPlace || "—"}
+                      />
+                    </>
                   )}
-                </div>
+                </CardContent>
+              </Card>
 
-                <Separator />
+              <Card className="rounded-3xl border-muted shadow-sm">
+                <CardHeader className="border-b bg-muted/30">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-primary" /> Sự nghiệp &
+                    Tiểu sử
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <InfoItem
+                      icon={<Briefcase className="h-4 w-4" />}
+                      label="Nghề nghiệp"
+                      value={person.occupation || "—"}
+                    />
+                    <InfoItem
+                      icon={<GraduationCap className="h-4 w-4" />}
+                      label="Học vấn"
+                      value={person.education || "—"}
+                    />
+                  </div>
+                  <Separator className="bg-muted/50" />
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
+                      Tiểu sử dòng tộc
+                    </label>
+                    <p className="text-sm leading-relaxed text-foreground/80">
+                      {person.biography || "Nội dung đang được cập nhật..."}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-3">
-                    Gia đình (vợ/chồng, con)
-                  </p>
-                  {familyDetails.families.length > 0 ? (
-                    <div className="space-y-4">
-                      {familyDetails.families.map((f, idx) => (
-                        <div
-                          key={f.handle}
-                          className="rounded-lg border bg-muted/20 p-4"
-                        >
-                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                            <Heart className="h-3 w-3 text-pink-500" />
-                            Gia đình {idx + 1}
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {f.members.length > 0 ? (
-                              f.members.map((m) => (
+            <TabsContent
+              value="relationships"
+              className="m-0 space-y-6 outline-none"
+            >
+              <Card className="rounded-3xl border-muted shadow-sm">
+                <CardHeader className="bg-muted/30 border-b">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Heart className="h-5 w-5 text-rose-500" /> Sơ đồ gia đình
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-8">
+                  {/* Parents */}
+                  <section>
+                    <h3 className="text-sm font-bold text-muted-foreground mb-4 flex items-center gap-2">
+                      <div className="w-1 h-4 bg-blue-500 rounded-full" /> Đấng
+                      sinh thành
+                    </h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {familyDetails.parents.length > 0 ? (
+                        familyDetails.parents.map((p) => (
+                          <Link key={p.handle} href={`/people/${p.handle}`}>
+                            <div className="p-4 rounded-2xl border bg-blue-50/30 hover:bg-blue-50 hover:border-blue-200 transition-all flex items-center gap-3">
+                              <div className="p-2 bg-white rounded-xl shadow-sm text-blue-600">
+                                <User className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-blue-500 uppercase">
+                                  {p.relType === "father" ? "Cha" : "Mẹ"}
+                                </p>
+                                <p className="font-semibold text-sm">
+                                  {p.displayName}
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
+                        ))
+                      ) : (
+                        <p className="text-sm italic text-muted-foreground px-2">
+                          Chưa cập nhật thông tin cha mẹ
+                        </p>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Spouse & Kids */}
+                  <section>
+                    <h3 className="text-sm font-bold text-muted-foreground mb-4 flex items-center gap-2">
+                      <div className="w-1 h-4 bg-rose-500 rounded-full" /> Tổ ấm
+                      riêng
+                    </h3>
+                    {familyDetails.families.length > 0 ? (
+                      <div className="space-y-4">
+                        {familyDetails.families.map((f, i) => (
+                          <div
+                            key={f.handle}
+                            className="p-5 rounded-3xl border border-dashed bg-muted/10 space-y-4"
+                          >
+                            <div className="flex flex-wrap gap-3">
+                              {f.members.map((m: any) => (
                                 <Link
                                   key={m.handle}
                                   href={`/people/${m.handle}`}
                                 >
                                   <Badge
-                                    variant="secondary"
-                                    className="hover:bg-primary/10 transition-colors cursor-pointer py-1.5 px-3"
+                                    variant={
+                                      m.relType === "spouse"
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                    className="px-4 py-1.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
                                   >
-                                    <span className="opacity-60 mr-1.5">
+                                    <span className="opacity-70 mr-2">
                                       {m.relType === "spouse"
                                         ? "Bạn đời:"
                                         : "Con:"}
-                                    </span>
-                                    <span className="font-semibold">
-                                      {m.displayName}
-                                    </span>
+                                    </span>{" "}
+                                    {m.displayName}
                                   </Badge>
                                 </Link>
-                              ))
-                            ) : (
-                              <p className="text-sm text-muted-foreground italic">
-                                Chưa có thành viên nào khác trong gia đình này
-                              </p>
-                            )}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm italic text-muted-foreground px-2">
+                        Chưa cập nhật thông tin gia đình riêng
+                      </p>
+                    )}
+                  </section>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="comments" className="m-0 outline-none">
+              <Card className="rounded-3xl border-muted shadow-sm overflow-hidden">
+                <CardHeader className="bg-emerald-500/5 border-b">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5 text-emerald-600" /> Trao
+                    đổi dòng họ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <CommentSection personHandle={handle} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </div>
+
+          {/* Sidebar Column */}
+          <div className="space-y-6">
+            <Card className="rounded-3xl border-muted shadow-sm">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-primary" /> Thông tin liên hệ
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                <ContactItem
+                  icon={<Phone className="h-4 w-4" />}
+                  label="Điện thoại"
+                  value={person.phone}
+                />
+                <ContactItem
+                  icon={<MapPin className="h-4 w-4" />}
+                  label="Quê quán"
+                  value={person.hometown}
+                />
+                <ContactItem
+                  icon={<MapPin className="h-4 w-4 text-emerald-500" />}
+                  label="Thường trú"
+                  value={person.currentAddress}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-muted shadow-sm">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-primary" /> Phân loại
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5">
+                <div className="flex flex-wrap gap-2">
+                  {person.tags?.length ? (
+                    person.tags.map((t) => (
+                      <Badge
+                        key={t}
+                        variant="secondary"
+                        className="rounded-lg bg-primary/5 text-primary border-none"
+                      >
+                        {t}
+                      </Badge>
+                    ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Không có thông tin
-                    </p>
+                    <span className="text-xs text-muted-foreground italic">
+                      Chưa có nhãn
+                    </span>
                   )}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Media */}
-        <TabsContent value="media">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Tư liệu liên quan</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-sm">
-                {person.mediaCount
-                  ? `${person.mediaCount} tư liệu`
-                  : "Chưa có tư liệu nào"}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Tính năng xem chi tiết sẽ được bổ sung trong Epic 3 (Media
-                Library).
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* History */}
-        <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Lịch sử thay đổi</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-sm">
-                Audit log cho entity này sẽ được bổ sung trong Epic 4.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Comments */}
-        <TabsContent value="comments">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <MessageCircle className="h-4 w-4" /> Bình luận
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CommentSection personHandle={handle} />
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </Tabs>
     </div>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+// --- HELPER COMPONENTS ---
+
+function InfoItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="text-sm">{value}</p>
+    <div className="flex items-start gap-3">
+      <div className="mt-1 p-2 rounded-lg bg-muted/50 text-muted-foreground">
+        {icon}
+      </div>
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
+        <p className="text-sm font-semibold text-foreground/90 leading-tight mt-0.5">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ContactItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value?: string;
+}) {
+  if (!value) return null;
+  return (
+    <div className="flex items-center gap-3 group">
+      <div className="p-2 rounded-xl bg-muted/50 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+        {icon}
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase">
+          {label}
+        </p>
+        <p className="text-sm font-medium truncate">{value}</p>
+      </div>
     </div>
   );
 }
