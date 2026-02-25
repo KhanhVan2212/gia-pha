@@ -66,6 +66,12 @@ interface ProfileUser {
   role: string;
   status: string;
   created_at: string;
+  person_handle: string | null;
+}
+
+interface PersonOption {
+  handle: string;
+  display_name: string;
 }
 
 interface InviteLink {
@@ -96,6 +102,14 @@ export default function AdminUsersPage() {
   const [inviteMaxUses, setInviteMaxUses] = useState(1);
   const [copied, setCopied] = useState<string | null>(null);
 
+  const [people, setPeople] = useState<PersonOption[]>([]);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkingUserId, setLinkingUserId] = useState<string | null>(null);
+  const [searchPerson, setSearchPerson] = useState("");
+  const [selectedPersonHandle, setSelectedPersonHandle] = useState<
+    string | null
+  >(null);
+
   // Fetch users from profiles table
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -125,12 +139,26 @@ export default function AdminUsersPage() {
     }
   }, []);
 
+  // Fetch people mapping
+  const fetchPeople = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("people")
+        .select("handle, display_name")
+        .order("display_name", { ascending: true });
+      if (!error && data) setPeople(data);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     if (!authLoading && isAdmin) {
       fetchUsers();
       fetchInvites();
+      fetchPeople();
     }
-  }, [authLoading, isAdmin, fetchUsers, fetchInvites]);
+  }, [authLoading, isAdmin, fetchUsers, fetchInvites, fetchPeople]);
 
   // Create invite link
   const handleCreateInvite = useCallback(async () => {
@@ -187,6 +215,29 @@ export default function AdminUsersPage() {
     },
     [],
   );
+
+  // Link person to user
+  const handleLinkPerson = async () => {
+    if (!linkingUserId) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ person_handle: selectedPersonHandle })
+      .eq("id", linkingUserId);
+
+    if (!error) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === linkingUserId
+            ? { ...u, person_handle: selectedPersonHandle }
+            : u,
+        ),
+      );
+      setLinkDialogOpen(false);
+      setLinkingUserId(null);
+      setSelectedPersonHandle(null);
+      setSearchPerson("");
+    }
+  };
 
   // Copy to clipboard
   const handleCopy = useCallback(async (text: string) => {
@@ -317,6 +368,87 @@ export default function AdminUsersPage() {
               </div>
             </DialogContent>
           </Dialog>
+
+          <Dialog
+            open={linkDialogOpen}
+            onOpenChange={(open) => {
+              setLinkDialogOpen(open);
+              if (!open) {
+                setLinkingUserId(null);
+                setSelectedPersonHandle(null);
+                setSearchPerson("");
+              }
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Liên kết tài khoản vào gia phả</DialogTitle>
+                <DialogDescription>
+                  Gán tài khoản này với một thành viên cụ thể trong phả hệ để họ
+                  có thể tự cập nhật thông tin cá nhân.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Tìm kiếm thành viên..."
+                    value={searchPerson}
+                    onChange={(e) => setSearchPerson(e.target.value)}
+                  />
+                  <div className="max-h-60 overflow-y-auto border rounded-xl p-2 space-y-1 mt-2">
+                    {searchPerson.length > 0 &&
+                      people
+                        .filter((p) =>
+                          p.display_name
+                            .toLowerCase()
+                            .includes(searchPerson.toLowerCase()),
+                        )
+                        .slice(0, 100) // limit results for rendering
+                        .map((p) => (
+                          <div
+                            key={p.handle}
+                            className={`p-2 text-sm rounded-md cursor-pointer transition-colors ${
+                              selectedPersonHandle === p.handle
+                                ? "bg-primary text-primary-foreground font-medium"
+                                : "hover:bg-muted"
+                            }`}
+                            onClick={() => setSelectedPersonHandle(p.handle)}
+                          >
+                            {p.display_name}
+                          </div>
+                        ))}
+                    {searchPerson.length === 0 && (
+                      <p className="text-sm text-muted-foreground p-2 italic">
+                        Nhập tên để tìm kiếm...
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {selectedPersonHandle && (
+                  <p className="text-sm">
+                    Đang chọn:{" "}
+                    <strong>
+                      {
+                        people.find((p) => p.handle === selectedPersonHandle)
+                          ?.display_name
+                      }
+                    </strong>
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedPersonHandle(null);
+                    }}
+                  >
+                    Gỡ liên kết
+                  </Button>
+                  <Button onClick={handleLinkPerson}>Lưu thay đổi</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -337,6 +469,7 @@ export default function AdminUsersPage() {
                 <TableRow>
                   <TableHead>Tên</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Thành viên gia phả</TableHead>
                   <TableHead>Quyền</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Ngày tham gia</TableHead>
@@ -350,6 +483,21 @@ export default function AdminUsersPage() {
                       {user.display_name || user.email.split("@")[0]}
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      {user.person_handle ? (
+                        <Badge
+                          variant="outline"
+                          className="font-normal border-primary/20 bg-primary/5 text-primary"
+                        >
+                          {people.find((p) => p.handle === user.person_handle)
+                            ?.display_name || "Lỗi hiển thị"}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground italic text-xs">
+                          Chưa liên kết
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="secondary"
@@ -378,6 +526,17 @@ export default function AdminUsersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setLinkingUserId(user.id);
+                              setSelectedPersonHandle(user.person_handle);
+                              setLinkDialogOpen(true);
+                            }}
+                          >
+                            <Link2 className="h-4 w-4 mr-2" />
+                            Liên kết thành viên
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleChangeRole(user.id, "admin")}
                           >

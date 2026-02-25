@@ -23,7 +23,7 @@ interface Person {
   displayName: string;
   gender: number;
   birthYear?: number;
-  deathYear?: number;
+  generation?: number;
   isLiving: boolean;
   isPrivacyFiltered: boolean;
 }
@@ -43,9 +43,9 @@ export default function PeopleListPage() {
         const { data, error } = await supabase
           .from("people")
           .select(
-            "handle, display_name, gender, birth_year, death_year, is_living, is_privacy_filtered"
+            "handle, display_name, gender, birth_year, generation, is_living, is_privacy_filtered",
           )
-          .order("display_name", { ascending: true });
+          .order("birth_year", { ascending: true, nullsFirst: false });
         if (!error && data) {
           setPeople(
             data.map((row: any) => ({
@@ -53,10 +53,10 @@ export default function PeopleListPage() {
               displayName: row.display_name,
               gender: row.gender,
               birthYear: row.birth_year,
-              deathYear: row.death_year,
+              generation: row.generation,
               isLiving: row.is_living,
               isPrivacyFiltered: row.is_privacy_filtered,
-            }))
+            })),
           );
         }
       } catch (err) {
@@ -88,7 +88,8 @@ export default function PeopleListPage() {
             Thành viên <span className="text-primary">Gia phả</span>
           </h1>
           <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
-            Tra cứu và tìm kiếm thông tin chi tiết của {people.length} thành viên trong dòng họ Nguyễn.
+            Tra cứu và tìm kiếm thông tin chi tiết của {people.length} thành
+            viên trong dòng họ Nguyễn.
           </p>
         </div>
         <div className="absolute top-0 right-0 -mr-12 -mt-12 w-48 h-48 bg-primary/10 rounded-full blur-3xl opacity-60 pointer-events-none" />
@@ -106,28 +107,34 @@ export default function PeopleListPage() {
               className="pl-9 rounded-xl border-muted focus-visible:ring-primary/20"
             />
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
-             <div className="bg-muted/50 p-1 rounded-full border flex gap-1">
-                <Button 
-                    variant={genderFilter === null ? 'secondary' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-full text-xs"
-                    onClick={() => setGenderFilter(null)}
-                >Tất cả</Button>
-                <Button 
-                    variant={genderFilter === 1 ? 'secondary' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-full text-xs"
-                    onClick={() => setGenderFilter(1)}
-                >Nam</Button>
-                <Button 
-                    variant={genderFilter === 2 ? 'secondary' : 'ghost'} 
-                    size="sm" 
-                    className="rounded-full text-xs"
-                    onClick={() => setGenderFilter(2)}
-                >Nữ</Button>
-             </div>
+            <div className="bg-muted/50 p-1 rounded-full border flex gap-1">
+              <Button
+                variant={genderFilter === null ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-full text-xs"
+                onClick={() => setGenderFilter(null)}
+              >
+                Tất cả
+              </Button>
+              <Button
+                variant={genderFilter === 1 ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-full text-xs"
+                onClick={() => setGenderFilter(1)}
+              >
+                Nam
+              </Button>
+              <Button
+                variant={genderFilter === 2 ? "secondary" : "ghost"}
+                size="sm"
+                className="rounded-full text-xs"
+                onClick={() => setGenderFilter(2)}
+              >
+                Nữ
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -142,19 +149,27 @@ export default function PeopleListPage() {
                   <TableHead className="font-bold py-4">Họ và tên</TableHead>
                   <TableHead className="font-bold">Giới tính</TableHead>
                   <TableHead className="font-bold">Năm sinh</TableHead>
-                  <TableHead className="font-bold">Năm mất</TableHead>
-                  <TableHead className="font-bold text-right pr-6">Trạng thái</TableHead>
+                  <TableHead className="font-bold text-right pr-6">
+                    Trạng thái
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-5 w-40" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-12" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-12" /></TableCell>
-                      <TableCell className="text-right"><Skeleton className="h-5 w-20 ml-auto" /></TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-40" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-16" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-12" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-5 w-20 ml-auto" />
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : filtered.length > 0 ? (
@@ -166,17 +181,27 @@ export default function PeopleListPage() {
                     >
                       <TableCell className="py-4">
                         <div className="flex items-center gap-2">
-                          <div className={cn(
-                            "p-2 rounded-lg group-hover:bg-white transition-colors",
-                            p.gender === 1 ? "bg-blue-50" : "bg-rose-50"
-                          )}>
-                            <UserCircle className={cn(
-                              "h-4 w-4",
-                              p.gender === 1 ? "text-blue-600" : "text-rose-600"
-                            )} />
+                          <div
+                            className={cn(
+                              "p-2 rounded-lg group-hover:bg-white transition-colors",
+                              p.gender === 1 ? "bg-blue-50" : "bg-rose-50",
+                            )}
+                          >
+                            <UserCircle
+                              className={cn(
+                                "h-4 w-4",
+                                p.gender === 1
+                                  ? "text-blue-600"
+                                  : "text-rose-600",
+                              )}
+                            />
                           </div>
                           <span className="font-semibold group-hover:text-primary transition-colors">
-                            {p.displayName}
+                            {p.displayName}{" "}
+                            <span className="text-muted-foreground font-normal text-sm">
+                              (Đời thứ {p.generation || "?"}
+                              {!p.isLiving ? " - mất" : ""})
+                            </span>
                           </span>
                           {p.isPrivacyFiltered && (
                             <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />
@@ -184,21 +209,27 @@ export default function PeopleListPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="rounded-md font-normal">
-                          {p.gender === 1 ? "Nam" : p.gender === 2 ? "Nữ" : "Khác"}
+                        <Badge
+                          variant="outline"
+                          className="rounded-md font-normal"
+                        >
+                          {p.gender === 1
+                            ? "Nam"
+                            : p.gender === 2
+                              ? "Nữ"
+                              : "Khác"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{p.birthYear || "—"}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {p.deathYear || (p.isLiving ? "—" : "?")}
+                        {p.birthYear || "—"}
                       </TableCell>
                       <TableCell className="text-right pr-6">
-                        <Badge 
+                        <Badge
                           className={cn(
                             "rounded-full px-3",
-                            p.isLiving 
-                              ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-transparent" 
-                              : "bg-slate-100 text-slate-500 hover:bg-slate-200 border-transparent"
+                            p.isLiving
+                              ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-transparent"
+                              : "bg-slate-100 text-slate-500 hover:bg-slate-200 border-transparent",
                           )}
                         >
                           {p.isLiving ? "Còn sống" : "Đã mất"}

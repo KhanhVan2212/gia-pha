@@ -19,7 +19,10 @@ import {
   MessageCircle,
   Calendar,
   Sparkles,
-  ShieldCheck,
+  Mail,
+  Globe,
+  Building2,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,11 +41,21 @@ interface FamilyMember {
   relType: string;
 }
 
+// Extends PersonDetail with extra DB columns not yet in the shared type
+interface PersonFull extends PersonDetail {
+  nick_name?: string;
+  company?: string;
+  zalo?: string;
+  facebook?: string;
+  current_address?: string;
+  notes?: string;
+}
+
 export default function PersonProfilePage() {
   const params = useParams();
   const router = useRouter();
   const handle = params.handle as string;
-  const [person, setPerson] = useState<PersonDetail | null>(null);
+  const [person, setPerson] = useState<PersonFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [familyDetails, setFamilyDetails] = useState<{
     parents: FamilyMember[];
@@ -60,25 +73,31 @@ export default function PersonProfilePage() {
           .single();
 
         if (!error && data) {
-          const row = data as any;
-          let surname = row.surname;
-          let firstName = row.first_name;
+          const row = data as Record<string, unknown>;
+          let surname = row.surname as string | undefined;
+          let firstName = row.first_name as string | undefined;
           if (!surname && !firstName && row.display_name) {
-            const parts = row.display_name.trim().split(/\s+/);
+            const parts = (row.display_name as string).trim().split(/\s+/);
             surname = parts.length > 1 ? parts[0] : "";
             firstName = parts[parts.length - 1];
           }
 
           setPerson({
             ...row,
-            displayName: row.display_name,
+            displayName: row.display_name as string,
             surname,
             firstName,
-            isLiving: row.is_living,
-            isPrivacyFiltered: row.is_privacy_filtered,
-            parentFamilies: row.parent_families || [],
-            families: row.families || [],
-          } as PersonDetail);
+            isLiving: row.is_living as boolean,
+            isPrivacyFiltered: row.is_privacy_filtered as boolean,
+            parentFamilies: (row.parent_families as string[]) || [],
+            families: (row.families as string[]) || [],
+            nick_name: row.nick_name as string | undefined,
+            company: row.company as string | undefined,
+            zalo: row.zalo as string | undefined,
+            facebook: row.facebook as string | undefined,
+            current_address: row.current_address as string | undefined,
+            notes: row.notes as string | undefined,
+          } as PersonFull);
         }
       } catch (err) {
         console.error(err);
@@ -134,7 +153,8 @@ export default function PersonProfilePage() {
           }
         }
 
-        const detailedFamilies: any[] = [];
+        const detailedFamilies: { handle: string; members: FamilyMember[] }[] =
+          [];
         if ((person.families?.length ?? 0) > 0) {
           const { data: famData } = await supabase
             .from("families")
@@ -324,7 +344,31 @@ export default function PersonProfilePage() {
                   <InfoItem
                     icon={<User className="h-4 w-4" />}
                     label="Họ và tên"
-                    value={`${person.surname} ${person.firstName}`}
+                    value={person.displayName}
+                  />
+                  {(person as any).nick_name && (
+                    <InfoItem
+                      icon={<Tag className="h-4 w-4" />}
+                      label="Bí danh / Tên thường gọi"
+                      value={(person as any).nick_name}
+                    />
+                  )}
+                  <InfoItem
+                    icon={<Sparkles className="h-4 w-4 text-primary" />}
+                    label="Thế hệ (Đời)"
+                    value={`Đời thứ ${person.generation || "?"}`}
+                  />
+                  {person.chi && (
+                    <InfoItem
+                      icon={<Sparkles className="h-4 w-4 text-amber-500" />}
+                      label="Chi"
+                      value={`Chi ${person.chi}`}
+                    />
+                  )}
+                  <InfoItem
+                    icon={<User className="h-4 w-4" />}
+                    label="Giới tính"
+                    value={person.gender === 1 ? "Nam" : "Nữ"}
                   />
                   <InfoItem
                     icon={<Calendar className="h-4 w-4" />}
@@ -339,7 +383,7 @@ export default function PersonProfilePage() {
                   <InfoItem
                     icon={<MapPin className="h-4 w-4" />}
                     label="Nơi sinh"
-                    value={person.birthPlace || "Chưa rõ"}
+                    value={person.birthPlace || "—"}
                   />
                   {!person.isLiving && (
                     <>
@@ -366,7 +410,7 @@ export default function PersonProfilePage() {
                 <CardHeader className="border-b bg-muted/30">
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Briefcase className="h-5 w-5 text-primary" /> Sự nghiệp &
-                    Tiểu sử
+                    Học vấn
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6 space-y-6">
@@ -376,21 +420,45 @@ export default function PersonProfilePage() {
                       label="Nghề nghiệp"
                       value={person.occupation || "—"}
                     />
+                    {(person as any).company && (
+                      <InfoItem
+                        icon={<Building2 className="h-4 w-4" />}
+                        label="Công ty / Nơi làm việc"
+                        value={(person as any).company}
+                      />
+                    )}
                     <InfoItem
                       icon={<GraduationCap className="h-4 w-4" />}
                       label="Học vấn"
                       value={person.education || "—"}
                     />
+                    <InfoItem
+                      icon={<MapPin className="h-4 w-4 text-amber-500" />}
+                      label="Quê quán"
+                      value={person.hometown || "—"}
+                    />
+                    {(person as any).current_address && (
+                      <InfoItem
+                        icon={<MapPin className="h-4 w-4 text-emerald-500" />}
+                        label="Địa chỉ thường trú"
+                        value={(person as any).current_address}
+                      />
+                    )}
                   </div>
-                  <Separator className="bg-muted/50" />
-                  <div>
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
-                      Tiểu sử dòng tộc
-                    </label>
-                    <p className="text-sm leading-relaxed text-foreground/80">
-                      {person.biography || "Nội dung đang được cập nhật..."}
-                    </p>
-                  </div>
+                  {(person as any).notes && (
+                    <>
+                      <Separator className="bg-muted/50" />
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                          <BookOpen className="h-3.5 w-3.5" />
+                          Tiểu sử & Ghi chú
+                        </label>
+                        <p className="text-sm leading-relaxed text-foreground/80 whitespace-pre-line">
+                          {(person as any).notes}
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -513,21 +581,52 @@ export default function PersonProfilePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-4">
-                <ContactItem
-                  icon={<Phone className="h-4 w-4" />}
-                  label="Điện thoại"
-                  value={person.phone}
-                />
-                <ContactItem
-                  icon={<MapPin className="h-4 w-4" />}
-                  label="Quê quán"
-                  value={person.hometown}
-                />
-                <ContactItem
-                  icon={<MapPin className="h-4 w-4 text-emerald-500" />}
-                  label="Thường trú"
-                  value={person.currentAddress}
-                />
+                {person.isPrivacyFiltered ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-2">
+                    <Lock className="h-4 w-4" />
+                    <span>Thông tin được bảo mật</span>
+                  </div>
+                ) : (
+                  <>
+                    <ContactItem
+                      icon={<Phone className="h-4 w-4" />}
+                      label="Điện thoại"
+                      value={person.phone}
+                      href={person.phone ? `tel:${person.phone}` : undefined}
+                    />
+                    <ContactItem
+                      icon={<Mail className="h-4 w-4" />}
+                      label="Email"
+                      value={person.email}
+                      href={person.email ? `mailto:${person.email}` : undefined}
+                    />
+                    <ContactItem
+                      icon={<Globe className="h-4 w-4 text-blue-500" />}
+                      label="Zalo"
+                      value={person.zalo}
+                    />
+                    <ContactItem
+                      icon={<Globe className="h-4 w-4 text-blue-600" />}
+                      label="Facebook"
+                      value={person.facebook}
+                      href={
+                        person.facebook?.startsWith("http")
+                          ? person.facebook
+                          : undefined
+                      }
+                    />
+                    {!(
+                      person.phone ||
+                      person.email ||
+                      person.zalo ||
+                      person.facebook
+                    ) && (
+                      <p className="text-xs text-muted-foreground italic">
+                        Chưa cập nhật thông tin liên hệ
+                      </p>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -596,10 +695,12 @@ function ContactItem({
   icon,
   label,
   value,
+  href,
 }: {
   icon: React.ReactNode;
   label: string;
   value?: string;
+  href?: string;
 }) {
   if (!value) return null;
   return (
@@ -611,7 +712,18 @@ function ContactItem({
         <p className="text-[10px] font-bold text-muted-foreground uppercase">
           {label}
         </p>
-        <p className="text-sm font-medium truncate">{value}</p>
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium truncate text-primary hover:underline block"
+          >
+            {value}
+          </a>
+        ) : (
+          <p className="text-sm font-medium truncate">{value}</p>
+        )}
       </div>
     </div>
   );

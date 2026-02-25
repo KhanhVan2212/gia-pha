@@ -18,6 +18,8 @@ import { CldUploadWidget } from "next-cloudinary";
 import { User, Phone, MapPin, Camera, Loader2, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GenealogyForm } from "@/components/genealogy-form";
 
 export default function ProfilePage() {
   const {
@@ -189,89 +191,122 @@ export default function ProfilePage() {
         </Card>
 
         {/* Profile Settings Form */}
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl">Thông tin liên lạc</CardTitle>
-            <CardDescription className="text-sm">
-              Cập nhật tên, số điện thoại và địa chỉ nơi ở hiện tại.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSave} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="displayName">Họ và tên</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="displayName"
-                    placeholder="VD: Nguyễn Văn A"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
+        <div className="flex flex-col gap-6 w-full">
+          <Tabs defaultValue="account" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="account">Tài khoản</TabsTrigger>
+              <TabsTrigger value="genealogy">Gia phả</TabsTrigger>
+            </TabsList>
 
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber">Số điện thoại</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="phoneNumber"
-                    placeholder="VD: 0987654321"
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
+            <TabsContent value="account">
+              <Card className="border shadow-sm">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Thông tin liên lạc</CardTitle>
+                  <CardDescription className="text-sm">
+                    Cập nhật tên, số điện thoại và địa chỉ nơi ở hiện tại.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSave} className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="displayName">Họ và tên</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="displayName"
+                          placeholder="VD: Nguyễn Văn A"
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="address">Địa chỉ nơi thường trú</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="address"
-                    placeholder="VD: Quận 1, Tp.Hồ Chí Minh"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phoneNumber">Số điện thoại</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="phoneNumber"
+                          placeholder="VD: 0987654321"
+                          type="tel"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
 
-              <div className="pt-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-3 mt-8">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  onClick={() => {
-                    setDisplayName(profile?.display_name || "");
-                    setPhoneNumber(profile?.phone_number || "");
-                    setAddress(profile?.address || "");
-                  }}
-                >
-                  Hủy thay đổi
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="w-full sm:w-auto shadow-sm"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang
-                      lưu...
-                    </>
-                  ) : (
-                    "Lưu thay đổi"
-                  )}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Địa chỉ nơi thường trú</Label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="address"
+                          placeholder="VD: Quận 1, Tp.Hồ Chí Minh"
+                          value={address}
+                          onChange={(e) => setAddress(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-3 mt-8">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          setDisplayName(profile?.display_name || "");
+                          setPhoneNumber(profile?.phone_number || "");
+                          setAddress(profile?.address || "");
+                        }}
+                      >
+                        Hủy thay đổi
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={saving}
+                        className="w-full sm:w-auto shadow-sm"
+                      >
+                        {saving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
+                            Đang lưu...
+                          </>
+                        ) : (
+                          "Lưu thay đổi"
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="genealogy">
+              {profile?.person_handle ? (
+                <GenealogyForm personHandle={profile.person_handle} />
+              ) : (
+                <Card className="border shadow-sm">
+                  <CardContent className="pt-6 flex flex-col items-center justify-center text-center p-8">
+                    <div className="bg-muted w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                      <User className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">
+                      Chưa liên kết phả hệ
+                    </h3>
+                    <p className="text-muted-foreground max-w-md">
+                      Tài khoản của bạn chưa được liên kết với một thành viên
+                      trong cây gia phả. Vui lòng liên hệ Quản trị viên để được
+                      cấp quyền tự chỉnh sửa thông tin.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     </div>
   );

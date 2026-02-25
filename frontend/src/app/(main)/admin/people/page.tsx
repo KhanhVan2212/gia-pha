@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Users,
   Search,
@@ -14,6 +15,7 @@ import {
   X,
   Save,
   UserPlus,
+  FileEdit,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,6 +85,7 @@ const EMPTY_FORM: PersonFormData = {
 
 export default function AdminPeoplePage() {
   const { isAdmin, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [people, setPeople] = useState<Person[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
   const [loading, setLoading] = useState(true);
@@ -894,8 +897,19 @@ export default function AdminPeoplePage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950"
+                          title="Sửa thông tin cá nhân"
+                          onClick={() =>
+                            router.push(`/admin/people/${p.handle}`)
+                          }
+                        >
+                          <FileEdit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8"
-                          title="Sửa thông tin"
+                          title="Sửa cấu trúc gia phả"
                           onClick={() => openEditModal(p)}
                         >
                           <Pencil className="h-4 w-4" />
