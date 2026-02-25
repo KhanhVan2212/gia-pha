@@ -54,7 +54,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-[70px] lg:h-[89px] items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-background/80 backdrop-blur-md px-4 lg:px-8 transition-all">
+    <header className="sticky top-0 z-40 flex h-[70px] sm:h-[81px] items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-background/80 backdrop-blur-md px-4 lg:px-8 transition-all">
       {/* --- Left side --- */}
       <div className="flex items-center gap-4">
         <div className="w-10 lg:hidden" />
