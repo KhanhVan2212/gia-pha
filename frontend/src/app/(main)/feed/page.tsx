@@ -718,9 +718,8 @@ function PostCard({
   );
 }
 
-// === Main Feed Page ===
 export default function FeedPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isViewer, isLoggedIn, loading: authLoading } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
@@ -808,7 +807,8 @@ export default function FeedPage() {
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 sm:w-64 sm:h-64 bg-primary/15 rounded-full blur-3xl pointer-events-none opacity-60" />
       </div>
 
-      <PostComposer onPostCreated={fetchPosts} />
+      {/* Composer (hidden from viewers) */}
+      {!isViewer && isLoggedIn && <PostComposer onPostCreated={fetchPosts} />}
 
       {loading ? (
         <div className="space-y-6">

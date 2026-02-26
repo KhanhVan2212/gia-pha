@@ -47,11 +47,30 @@ interface EventItem {
   rsvp_count?: number;
 }
 
-const typeLabels: Record<string, { label: string; emoji: string; class: string }> = {
-  MEMORIAL: { label: "Giỗ chạp", emoji: "🕯️", class: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-  MEETING: { label: "Họp họ", emoji: "🤝", class: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-  FESTIVAL: { label: "Lễ hội", emoji: "🎊", class: "bg-rose-500/10 text-rose-600 border-rose-500/20" },
-  OTHER: { label: "Khác", emoji: "📅", class: "bg-slate-500/10 text-slate-600 border-slate-500/20" },
+const typeLabels: Record<
+  string,
+  { label: string; emoji: string; class: string }
+> = {
+  MEMORIAL: {
+    label: "Giỗ chạp",
+    emoji: "🕯️",
+    class: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  },
+  MEETING: {
+    label: "Họp họ",
+    emoji: "🤝",
+    class: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  },
+  FESTIVAL: {
+    label: "Lễ hội",
+    emoji: "🎊",
+    class: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+  },
+  OTHER: {
+    label: "Khác",
+    emoji: "📅",
+    class: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+  },
 };
 
 function formatDate(dateStr: string) {
@@ -125,7 +144,9 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium ml-1">Tên sự kiện <span className="text-rose-500">*</span></label>
+            <label className="text-sm font-medium ml-1">
+              Tên sự kiện <span className="text-rose-500">*</span>
+            </label>
             <Input
               placeholder="Ví dụ: Giỗ tổ dòng họ..."
               value={title}
@@ -134,7 +155,9 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium ml-1">Thời gian <span className="text-rose-500">*</span></label>
+            <label className="text-sm font-medium ml-1">
+              Thời gian <span className="text-rose-500">*</span>
+            </label>
             <Input
               type="datetime-local"
               value={startAt}
@@ -202,8 +225,14 @@ function EventCard({ event }: { event: EventItem }) {
         <div className="flex flex-col sm:flex-row h-full">
           {/* Cột thời gian bên trái (Desktop) hoặc thanh trên (Mobile) */}
           <div className="w-full sm:w-32 bg-orange-600 text-white p-4 flex flex-col items-center justify-center text-center sm:rounded-r-3xl shrink-0">
-            <span className="text-xs font-medium uppercase opacity-80">{new Date(event.start_at).toLocaleDateString("vi-VN", { month: 'short' })}</span>
-            <span className="text-3xl font-black">{new Date(event.start_at).getDate()}</span>
+            <span className="text-xs font-medium uppercase opacity-80">
+              {new Date(event.start_at).toLocaleDateString("vi-VN", {
+                month: "short",
+              })}
+            </span>
+            <span className="text-3xl font-black">
+              {new Date(event.start_at).getDate()}
+            </span>
             <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded-full mt-1">
               {formatTime(event.start_at)}
             </span>
@@ -212,7 +241,10 @@ function EventCard({ event }: { event: EventItem }) {
           <div className="p-5 flex-1 min-w-0 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1 min-w-0">
-                <Badge variant="outline" className={cn("rounded-full font-medium py-0 px-2", tl.class)}>
+                <Badge
+                  variant="outline"
+                  className={cn("rounded-full font-medium py-0 px-2", tl.class)}
+                >
                   {tl.emoji} {tl.label}
                 </Badge>
                 <h3 className="text-lg font-extrabold text-foreground truncate group-hover:text-orange-600 transition-colors leading-tight">
@@ -231,7 +263,9 @@ function EventCard({ event }: { event: EventItem }) {
             <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pt-1">
               <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <MapPin className="h-3.5 w-3.5 text-orange-500" />
-                <span className="truncate">{event.location || "Liên hệ ban tổ chức"}</span>
+                <span className="truncate">
+                  {event.location || "Liên hệ ban tổ chức"}
+                </span>
               </div>
               {event.rsvp_count !== undefined && event.rsvp_count > 0 && (
                 <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
@@ -240,13 +274,16 @@ function EventCard({ event }: { event: EventItem }) {
                 </div>
               )}
             </div>
-            
+
             <div className="flex items-center gap-2 pt-2 border-t border-muted-foreground/5">
               <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center overflow-hidden relative border border-black/5">
                 <User className="h-3 w-3 text-muted-foreground" />
               </div>
               <span className="text-[11px] text-muted-foreground">
-                Đăng bởi <span className="font-bold text-foreground/80">{event.author_name || "Ẩn danh"}</span>
+                Đăng bởi{" "}
+                <span className="font-bold text-foreground/80">
+                  {event.author_name || "Ẩn danh"}
+                </span>
               </span>
             </div>
           </div>
@@ -258,7 +295,7 @@ function EventCard({ event }: { event: EventItem }) {
 
 // === Main Page ===
 export default function EventsPage() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isViewer } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -293,11 +330,14 @@ export default function EventsPage() {
               Sự kiện dòng họ
             </h1>
             <p className="text-muted-foreground mt-3 text-lg leading-relaxed">
-              Cập nhật lịch giỗ chạp, họp mặt và các hoạt động văn hóa tâm linh gắn kết các thành viên.
+              Cập nhật lịch giỗ chạp, họp mặt và các hoạt động văn hóa tâm linh
+              gắn kết các thành viên.
             </p>
           </div>
           <div className="shrink-0">
-            {isLoggedIn && <CreateEventDialog onCreated={fetchEvents} />}
+            {isLoggedIn && !isViewer && (
+              <CreateEventDialog onCreated={fetchEvents} />
+            )}
           </div>
         </div>
         {/* Decorative Elements */}
@@ -326,7 +366,8 @@ export default function EventsPage() {
               </div>
               <h3 className="text-xl font-bold mb-2">Chưa có sự kiện nào</h3>
               <p className="text-muted-foreground max-w-xs mx-auto">
-                Hiện tại chưa có sự kiện nào được lên lịch. Bạn có thể tự mình tạo sự kiện mới!
+                Hiện tại chưa có sự kiện nào được lên lịch. Bạn có thể tự mình
+                tạo sự kiện mới!
               </p>
             </CardContent>
           </Card>
@@ -343,7 +384,8 @@ export default function EventsPage() {
       <div className="bg-muted/30 border border-muted-foreground/5 rounded-2xl p-4 flex items-start gap-3">
         <Info className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
         <p className="text-sm text-muted-foreground italic">
-          Các sự kiện do thành viên tạo sẽ cần được Ban quản trị phê duyệt trước khi hiển thị công khai trên lịch chung của dòng họ.
+          Các sự kiện do thành viên tạo sẽ cần được Ban quản trị phê duyệt trước
+          khi hiển thị công khai trên lịch chung của dòng họ.
         </p>
       </div>
     </div>

@@ -113,7 +113,7 @@ BEGIN
     VALUES (
         NEW.id,
         NEW.email,
-        'member',
+        'viewer',
         'active',
         COALESCE(NEW.raw_user_meta_data->>'display_name', NEW.email)
     )

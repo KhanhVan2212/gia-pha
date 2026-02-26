@@ -56,6 +56,7 @@ const ROLE_COLORS: Record<string, string> = {
   archivist:
     "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
   member: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  viewer: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
   guest: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
 };
 
@@ -98,7 +99,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
 
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteRole, setInviteRole] = useState("viewer");
   const [inviteMaxUses, setInviteMaxUses] = useState(1);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -339,6 +340,9 @@ export default function AdminUsersPage() {
                     <option value="member">
                       Member — Xem và đề xuất chỉnh sửa
                     </option>
+                    <option value="viewer">
+                      Viewer — Chỉ được xem, không đăng bài
+                    </option>
                     <option value="editor">Editor — Chỉnh sửa trực tiếp</option>
                     <option value="archivist">
                       Archivist — Quản lý tư liệu
@@ -551,6 +555,11 @@ export default function AdminUsersPage() {
                             onClick={() => handleChangeRole(user.id, "member")}
                           >
                             Đặt Member
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleChangeRole(user.id, "viewer")}
+                          >
+                            Đặt Viewer
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Contact, Search, User, Activity, ShieldCheck, UserCog } from "lucide-react";
+import {
+  Contact,
+  Search,
+  User,
+  Activity,
+  ShieldCheck,
+  UserCog,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +41,7 @@ export default function DirectoryPage() {
         .from("profiles")
         .select("*")
         .eq("status", "active")
+        .neq("role", "viewer")
         .order("created_at", { ascending: true });
       if (data) setMembers(data);
     } catch (err) {
@@ -55,13 +63,31 @@ export default function DirectoryPage() {
 
   const getRoleBadge = (role: string) => {
     const roles: Record<string, { label: string; class: string; icon: any }> = {
-      admin: { label: "Quản trị", class: "bg-rose-500/10 text-rose-600 border-rose-500/20", icon: ShieldCheck },
-      editor: { label: "Biên tập", class: "bg-amber-500/10 text-amber-600 border-amber-500/20", icon: UserCog },
-      member: { label: "Thành viên", class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", icon: User },
+      admin: {
+        label: "Quản trị",
+        class: "bg-rose-500/10 text-rose-600 border-rose-500/20",
+        icon: ShieldCheck,
+      },
+      editor: {
+        label: "Biên tập",
+        class: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+        icon: UserCog,
+      },
+      member: {
+        label: "Thành viên",
+        class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+        icon: User,
+      },
     };
     const config = roles[role] || roles.member;
     return (
-      <Badge variant="outline" className={cn("font-medium gap-1 px-2 py-0.5 rounded-full", config.class)}>
+      <Badge
+        variant="outline"
+        className={cn(
+          "font-medium gap-1 px-2 py-0.5 rounded-full",
+          config.class,
+        )}
+      >
         <config.icon className="h-3 w-3" />
         {config.label}
       </Badge>
@@ -78,7 +104,8 @@ export default function DirectoryPage() {
             Danh bạ dòng họ
           </h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
-            Kết nối và tìm kiếm thông tin liên lạc của các thành viên đã đăng ký trong hệ thống.
+            Kết nối và tìm kiếm thông tin liên lạc của các thành viên đã đăng ký
+            trong hệ thống.
           </p>
         </div>
         <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -96,7 +123,9 @@ export default function DirectoryPage() {
           />
         </div>
         <div className="text-sm text-muted-foreground whitespace-nowrap">
-          Hiển thị <span className="font-bold text-foreground">{filtered.length}</span> thành viên
+          Hiển thị{" "}
+          <span className="font-bold text-foreground">{filtered.length}</span>{" "}
+          thành viên
         </div>
       </div>
 
@@ -122,7 +151,9 @@ export default function DirectoryPage() {
               <Search className="h-8 w-8 text-muted-foreground/50" />
             </div>
             <h3 className="text-lg font-medium">Không tìm thấy thành viên</h3>
-            <p className="text-muted-foreground">Hãy thử tìm kiếm với từ khóa khác.</p>
+            <p className="text-muted-foreground">
+              Hãy thử tìm kiếm với từ khóa khác.
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -148,7 +179,7 @@ export default function DirectoryPage() {
                       <User className="h-6 w-6 text-indigo-600" />
                     )}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <p className="font-bold text-foreground truncate group-hover:text-indigo-600 transition-colors">

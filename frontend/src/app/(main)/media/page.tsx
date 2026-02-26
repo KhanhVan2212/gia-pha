@@ -69,8 +69,8 @@ const STATE_CONFIG: Record<
   },
 };
 
-export default function MediaLibraryPage() {
-  const { user, isAdmin, isLoggedIn } = useAuth();
+export default function MediaGallery() {
+  const { user, isLoggedIn, isViewer } = useAuth();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -150,7 +150,7 @@ export default function MediaLibraryPage() {
             </p>
           </div>
 
-          {isLoggedIn && (
+          {isLoggedIn && !isViewer && (
             <CldUploadWidget
               signatureEndpoint="/api/cloudinary/sign"
               onSuccess={handleUploadSuccess}

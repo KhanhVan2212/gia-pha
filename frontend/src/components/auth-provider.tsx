@@ -11,7 +11,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
-export type UserRole = "admin" | "member" | null;
+export type UserRole = "admin" | "member" | "viewer" | null;
 
 interface Profile {
   id: string;
@@ -32,6 +32,7 @@ interface AuthState {
   loading: boolean;
   isAdmin: boolean;
   isMember: boolean;
+  isViewer: boolean;
   isLoggedIn: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (
@@ -83,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: u.email || "",
           display_name:
             u.user_metadata?.display_name || u.email?.split("@")[0] || "",
-          role: "member",
+          role: "viewer",
         });
       }
       await fetchProfile(u.id);
@@ -173,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isAdmin: role === "admin",
         isMember: role === "member" || role === "admin",
+        isViewer: role === "viewer",
         isLoggedIn: !!user,
         signIn,
         signUp,
