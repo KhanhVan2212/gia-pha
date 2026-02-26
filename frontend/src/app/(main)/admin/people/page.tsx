@@ -1249,11 +1249,29 @@ export default function AdminPeoplePage() {
                           p.is_patrilineal && p.handle !== editPerson?.handle,
                       )
                       .sort((a, b) => a.generation - b.generation)
-                      .map((p) => (
-                        <option key={p.handle} value={p.handle}>
-                          Đời {p.generation} · {p.display_name}
-                        </option>
-                      ))}
+                      .map((p) => {
+                        let parentStr = "";
+                        if (p.parent_families && p.parent_families.length > 0) {
+                          const pf = families.find(
+                            (f) => f.handle === p.parent_families[0],
+                          );
+                          if (pf && pf.father_handle) {
+                            const father = people.find(
+                              (hp) => hp.handle === pf.father_handle,
+                            );
+                            if (father) {
+                              parentStr = ` (${father.display_name})`;
+                            }
+                          }
+                        }
+
+                        return (
+                          <option key={p.handle} value={p.handle}>
+                            Đời {p.generation} · {p.display_name}
+                            {parentStr}
+                          </option>
+                        );
+                      })}
                   </select>
                 </div>
               )}
