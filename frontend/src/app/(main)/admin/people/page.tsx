@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Users,
   Search,
@@ -127,51 +128,58 @@ export default function AdminPeoplePage() {
   }, [authLoading, isAdmin, fetchPeople]);
 
   // ─── Delete ───────────────────────────────────────────────
-  const handleDelete = async (handle: string, name: string) => {
-    if (
-      !confirm(
-        `Bạn có chắc chắn muốn xóa "${name}" khỏi gia phả?\n\n⚠️ Hành động này không thể hoàn tác và sẽ xóa thành viên khỏi cơ sở dữ liệu.`,
-      )
-    )
-      return;
+  const handleDelete = (handle: string, name: string) => {
+    toast("Xác nhận xóa", {
+      description: `Bạn có chắc chắn muốn xóa "${name}" khỏi gia phả?\n\n⚠️ Hành động này không thể hoàn tác và sẽ xóa thành viên khỏi cơ sở dữ liệu.`,
+      duration: 10000,
+      action: {
+        label: "Xóa",
+        onClick: async () => {
+          setProcessingId(handle);
+          try {
+            // Remove from any families.children arrays
+            const { data: famData } = await supabase
+              .from("families")
+              .select("handle, children")
+              .contains("children", [handle]);
 
-    setProcessingId(handle);
-    try {
-      // Remove from any families.children arrays
-      const { data: famData } = await supabase
-        .from("families")
-        .select("handle, children")
-        .contains("children", [handle]);
+            if (famData && famData.length > 0) {
+              for (const fam of famData) {
+                const newChildren = (fam.children as string[]).filter(
+                  (c: string) => c !== handle,
+                );
+                await supabase
+                  .from("families")
+                  .update({ children: newChildren })
+                  .eq("handle", fam.handle);
+              }
+            }
 
-      if (famData && famData.length > 0) {
-        for (const fam of famData) {
-          const newChildren = (fam.children as string[]).filter(
-            (c: string) => c !== handle,
-          );
-          await supabase
-            .from("families")
-            .update({ children: newChildren })
-            .eq("handle", fam.handle);
-        }
-      }
+            // Delete the person
+            const { error } = await supabase
+              .from("people")
+              .delete()
+              .eq("handle", handle);
 
-      // Delete the person
-      const { error } = await supabase
-        .from("people")
-        .delete()
-        .eq("handle", handle);
-
-      if (error) throw error;
-      setPeople((prev) => prev.filter((p) => p.handle !== handle));
-    } catch (err: unknown) {
-      alert(
-        `Lỗi khi xóa: ${err instanceof Error ? err.message : "Lỗi không xác định"}`,
-      );
-    } finally {
-      setProcessingId(null);
-      // Automatically clean up any families that might have become empty
-      await cleanupFamilies();
-    }
+            if (error) throw error;
+            setPeople((prev) => prev.filter((p) => p.handle !== handle));
+            toast.success("Đã xóa thành viên");
+          } catch (err: unknown) {
+            toast.error(
+              `Lỗi khi xóa: ${err instanceof Error ? err.message : "Lỗi không xác định"}`,
+            );
+          } finally {
+            setProcessingId(null);
+            // Automatically clean up any families that might have become empty
+            await cleanupFamilies();
+          }
+        },
+      },
+      cancel: {
+        label: "Hủy",
+        onClick: () => {},
+      },
+    });
   };
 
   // ─── Cleanup Empty Families ────────────────────────────────
@@ -224,7 +232,7 @@ export default function AdminPeoplePage() {
   const handleManualCleanup = async () => {
     setLoading(true);
     const count = await cleanupFamilies();
-    alert(`Đã dọn dẹp ${count} bản ghi gia đình trống.`);
+    toast.success(`Đã dọn dẹp ${count} bản ghi gia đình trống.`);
     setLoading(false);
   };
 
@@ -596,6 +604,7 @@ export default function AdminPeoplePage() {
           .update(updates)
           .eq("handle", editPerson.handle);
         if (error) throw error;
+        toast.success("Cập nhật thành viên thành công");
       } else {
         // ── ADD mode ──
         const handle = `p-${Date.now()}`;
@@ -749,14 +758,15 @@ export default function AdminPeoplePage() {
             }
           }
         }
+        toast.success("Thêm thành viên thành công");
       }
 
       await fetchPeople();
       closeModal();
     } catch (err: unknown) {
-      setFormError(
-        `Lỗi: ${err instanceof Error ? err.message : "Lỗi không xác định"}`,
-      );
+      const errorMessage = `Lỗi: ${err instanceof Error ? err.message : "Lỗi không xác định"}`;
+      setFormError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
       await cleanupFamilies();

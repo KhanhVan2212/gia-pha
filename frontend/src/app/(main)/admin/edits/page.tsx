@@ -325,6 +325,20 @@ export default function AdminEditsPage() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", id);
+
+        if (action === "approved") {
+          const post = posts.find((p) => p.id === id);
+          const authorName =
+            post?.author?.display_name ||
+            post?.author?.email?.split("@")[0] ||
+            "Thành viên";
+          await supabase.rpc("notify_all_users", {
+            p_title: "Bảng tin mới",
+            p_body: `${authorName} đã đăng bài viết mới`,
+            p_type: "NEW_POST",
+            p_link: "/feed",
+          });
+        }
       } else if (activeTab === "events") {
         const eventStatus = action === "approved" ? "published" : "rejected";
         await supabase
@@ -334,6 +348,17 @@ export default function AdminEditsPage() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", id);
+
+        if (action === "approved") {
+          const evt = events.find((e) => e.id === id);
+          const authorName = evt?.author_name || "Thành viên";
+          await supabase.rpc("notify_all_users", {
+            p_title: "Sự kiện mới",
+            p_body: `${authorName} đã thêm sự kiện mới`,
+            p_type: "NEW_EVENT",
+            p_link: "/events",
+          });
+        }
       } else if (activeTab === "media") {
         const mediaState = action === "approved" ? "PUBLISHED" : "REJECTED";
         await supabase.from("media").update({ state: mediaState }).eq("id", id);

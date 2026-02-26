@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { 
-  ImageIcon, 
-  Upload, 
-  Loader2, 
-  Play, 
-  Maximize2, 
-  Clock, 
-  CheckCircle2, 
+import { toast } from "sonner";
+import {
+  ImageIcon,
+  Upload,
+  Loader2,
+  Play,
+  Maximize2,
+  Clock,
+  CheckCircle2,
   XCircle,
   Calendar,
-  User as UserIcon
+  User as UserIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,9 +49,24 @@ const STATE_CONFIG: Record<
   string,
   { variant: string; label: string; icon: any; color: string }
 > = {
-  PENDING: { variant: "secondary", label: "Chờ duyệt", icon: Clock, color: "text-amber-600 bg-amber-50" },
-  PUBLISHED: { variant: "default", label: "Đã duyệt", icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50" },
-  REJECTED: { variant: "destructive", label: "Từ chối", icon: XCircle, color: "text-rose-600 bg-rose-50" },
+  PENDING: {
+    variant: "secondary",
+    label: "Chờ duyệt",
+    icon: Clock,
+    color: "text-amber-600 bg-amber-50",
+  },
+  PUBLISHED: {
+    variant: "default",
+    label: "Đã duyệt",
+    icon: CheckCircle2,
+    color: "text-emerald-600 bg-emerald-50",
+  },
+  REJECTED: {
+    variant: "destructive",
+    label: "Từ chối",
+    icon: XCircle,
+    color: "text-rose-600 bg-rose-50",
+  },
 };
 
 export default function MediaLibraryPage() {
@@ -83,7 +99,10 @@ export default function MediaLibraryPage() {
       const info = result.info;
       const { error } = await supabase.from("media").insert({
         file_name: info.original_filename + "." + info.format,
-        mime_type: info.resource_type === "video" ? "video/" + info.format : "image/" + info.format,
+        mime_type:
+          info.resource_type === "video"
+            ? "video/" + info.format
+            : "image/" + info.format,
         file_size: info.bytes,
         url: info.secure_url,
         public_id: info.public_id,
@@ -94,9 +113,11 @@ export default function MediaLibraryPage() {
       });
 
       if (error) {
-        alert("Lưu thất bại: " + error.message);
+        toast.error("Lưu thất bại: " + error.message);
       } else {
-        alert("Tải lên thành công! Hình ảnh của bạn đang chờ quản trị viên phê duyệt.");
+        toast.success(
+          "Tải lên thành công! Hình ảnh của bạn đang chờ quản trị viên phê duyệt.",
+        );
       }
     } finally {
       setUploading(false);
@@ -120,9 +141,12 @@ export default function MediaLibraryPage() {
             <div className="inline-flex items-center rounded-full px-3 py-1 text-xs md:text-sm font-medium text-primary bg-primary/10 mb-2">
               <ImageIcon className="h-4 w-4 mr-2" /> Kho tư liệu dòng họ
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Thư viện <span className="text-primary">Hình ảnh</span></h1>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+              Thư viện <span className="text-primary">Hình ảnh</span>
+            </h1>
             <p className="text-muted-foreground max-w-xl text-sm md:text-base">
-              Nơi lưu trữ những khoảnh khắc, thước phim và tài liệu quý giá của các thế hệ trong gia đình.
+              Nơi lưu trữ những khoảnh khắc, thước phim và tài liệu quý giá của
+              các thế hệ trong gia đình.
             </p>
           </div>
 
@@ -130,15 +154,23 @@ export default function MediaLibraryPage() {
             <CldUploadWidget
               signatureEndpoint="/api/cloudinary/sign"
               onSuccess={handleUploadSuccess}
-              options={{ sources: ["local", "url", "camera"], multiple: true, maxFiles: 5 }}
+              options={{
+                sources: ["local", "url", "camera"],
+                multiple: true,
+                maxFiles: 5,
+              }}
             >
               {({ open }) => (
-                <Button 
-                  onClick={() => open()} 
-                  disabled={uploading} 
+                <Button
+                  onClick={() => open()}
+                  disabled={uploading}
                   className="rounded-2xl h-12 px-6 shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
                 >
-                  {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                  {uploading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
                   Tải lên tư liệu
                 </Button>
               )}
@@ -152,7 +184,10 @@ export default function MediaLibraryPage() {
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <Card key={i} className="aspect-square rounded-3xl animate-pulse bg-muted" />
+            <Card
+              key={i}
+              className="aspect-square rounded-3xl animate-pulse bg-muted"
+            />
           ))}
         </div>
       ) : items.length === 0 ? (
@@ -160,18 +195,22 @@ export default function MediaLibraryPage() {
           <div className="p-4 bg-background rounded-full mb-4 shadow-sm">
             <ImageIcon className="h-10 w-10 text-muted-foreground opacity-20" />
           </div>
-          <p className="text-muted-foreground font-medium">Chưa có hình ảnh hay video nào được đăng tải</p>
-          <p className="text-xs text-muted-foreground mt-1">Hãy là người đầu tiên chia sẻ khoảnh khắc gia đình</p>
+          <p className="text-muted-foreground font-medium">
+            Chưa có hình ảnh hay video nào được đăng tải
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Hãy là người đầu tiên chia sẻ khoảnh khắc gia đình
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {items.map((item) => (
-            <Card 
-              key={item.id} 
+            <Card
+              key={item.id}
               className="group relative overflow-hidden rounded-3xl border-muted transition-all duration-300 hover:shadow-xl hover:-translate-y-1 bg-card"
             >
               {/* Media Preview */}
-              <div 
+              <div
                 className="relative aspect-square overflow-hidden bg-muted cursor-zoom-in"
                 onClick={() => setSelectedItem(item)}
               >
@@ -185,7 +224,10 @@ export default function MediaLibraryPage() {
                   />
                 ) : item.mime_type?.startsWith("video") ? (
                   <div className="relative h-full w-full bg-slate-900 flex items-center justify-center">
-                    <video src={item.url || ""} className="h-full w-full object-cover opacity-60" />
+                    <video
+                      src={item.url || ""}
+                      className="h-full w-full object-cover opacity-60"
+                    />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Play className="h-5 w-5 text-white fill-white" />
@@ -197,7 +239,7 @@ export default function MediaLibraryPage() {
                     <ImageIcon className="h-10 w-10 text-muted-foreground/30" />
                   </div>
                 )}
-                
+
                 {/* Overlay Action */}
                 <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                   <span className="text-white text-xs font-medium flex items-center gap-1">
@@ -212,26 +254,32 @@ export default function MediaLibraryPage() {
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     {formatSize(item.file_size)}
                   </span>
-                  {item.state !== 'PUBLISHED' && (
-                    <Badge variant="outline" className={cn("text-[10px] rounded-full border-none", STATE_CONFIG[item.state]?.color)}>
+                  {item.state !== "PUBLISHED" && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] rounded-full border-none",
+                        STATE_CONFIG[item.state]?.color,
+                      )}
+                    >
                       {STATE_CONFIG[item.state]?.label}
                     </Badge>
                   )}
                 </div>
 
                 <div className="space-y-2 pt-2 border-t border-muted/50">
-                   <div className="flex items-center gap-2 text-muted-foreground">
-                      <UserIcon className="h-3 w-3" />
-                      <span className="text-xs truncate font-medium">
-                        {item.uploader?.display_name || "Thành viên gia đình"}
-                      </span>
-                   </div>
-                   <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span className="text-[11px]">
-                        {new Date(item.created_at).toLocaleDateString("vi-VN")}
-                      </span>
-                   </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <UserIcon className="h-3 w-3" />
+                    <span className="text-xs truncate font-medium">
+                      {item.uploader?.display_name || "Thành viên gia đình"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span className="text-[11px]">
+                      {new Date(item.created_at).toLocaleDateString("vi-VN")}
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -240,12 +288,15 @@ export default function MediaLibraryPage() {
       )}
 
       {/* --- Fullscreen Dialog --- */}
-      <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
+      <Dialog
+        open={!!selectedItem}
+        onOpenChange={(open) => !open && setSelectedItem(null)}
+      >
         <DialogContent className="max-w-5xl p-0 bg-transparent border-none shadow-none flex items-center justify-center overflow-hidden">
           <DialogHeader className="sr-only">
             <DialogTitle>{selectedItem?.file_name}</DialogTitle>
           </DialogHeader>
-          
+
           {selectedItem && (
             <div className="relative w-full h-[85vh] flex flex-col items-center justify-center group">
               {selectedItem.mime_type?.startsWith("image") ? (
@@ -267,11 +318,18 @@ export default function MediaLibraryPage() {
                   className="w-full h-full max-h-[80vh] object-contain rounded-2xl shadow-2xl bg-black"
                 />
               )}
-              
+
               {/* Image Info Panel in Dialog */}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <p className="text-sm font-semibold">{selectedItem.title || selectedItem.file_name}</p>
-                <p className="text-[10px] text-white/60">Đăng bởi {selectedItem.uploader?.display_name} • {new Date(selectedItem.created_at).toLocaleDateString("vi-VN")}</p>
+                <p className="text-sm font-semibold">
+                  {selectedItem.title || selectedItem.file_name}
+                </p>
+                <p className="text-[10px] text-white/60">
+                  Đăng bởi {selectedItem.uploader?.display_name} •{" "}
+                  {new Date(selectedItem.created_at).toLocaleDateString(
+                    "vi-VN",
+                  )}
+                </p>
               </div>
             </div>
           )}

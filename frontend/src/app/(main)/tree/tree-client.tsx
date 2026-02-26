@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { ContributeDialog } from "@/components/contribute-dialog";
+import { toast } from "sonner";
 import {
   Search,
   ZoomIn,
@@ -1454,7 +1455,7 @@ export default function TreeViewPage() {
                 isLiving: true,
               });
               if (pErr) {
-                alert(`Lỗi khi thêm thành viên: ${pErr}`);
+                toast.error(`Lỗi khi thêm thành viên: ${pErr}`);
                 return;
               }
 
@@ -1480,7 +1481,7 @@ export default function TreeViewPage() {
                 };
                 const { error: fErr } = await addFamily(newFamilyData);
                 if (fErr) {
-                  alert(`Lỗi khi tạo gia đình: ${fErr}`);
+                  toast.error(`Lỗi khi tạo gia đình: ${fErr}`);
                   return;
                 }
                 setTreeData((prev) =>
@@ -1556,31 +1557,41 @@ export default function TreeViewPage() {
                 );
               }
             }}
-            onDeletePerson={async (handle) => {
-              if (
-                !confirm(
+            onDeletePerson={(handle) => {
+              toast("Xóa thành viên", {
+                description:
                   "Bạn có chắc chắn muốn xóa thành viên này hoàn toàn khỏi cơ sở dữ liệu?",
-                )
-              )
-                return;
-              const { error } = await deletePerson(handle);
-              if (error) {
-                alert(`Lỗi: ${error}`);
-                return;
-              }
-              setTreeData((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      people: prev.people.filter((p) => p.handle !== handle),
-                      families: prev.families.map((f) => ({
-                        ...f,
-                        children: f.children.filter((c) => c !== handle),
-                      })),
+                action: {
+                  label: "Xóa",
+                  onClick: async () => {
+                    const { error } = await deletePerson(handle);
+                    if (error) {
+                      toast.error(`Lỗi: ${error}`);
+                      return;
                     }
-                  : null,
-              );
-              setSelectedCard(null);
+                    setTreeData((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            people: prev.people.filter(
+                              (p) => p.handle !== handle,
+                            ),
+                            families: prev.families.map((f) => ({
+                              ...f,
+                              children: f.children.filter((c) => c !== handle),
+                            })),
+                          }
+                        : null,
+                    );
+                    setSelectedCard(null);
+                    toast.success("Đã xóa thành viên");
+                  },
+                },
+                cancel: {
+                  label: "Hủy",
+                  onClick: () => {},
+                },
+              });
             }}
             onReorderChildren={(familyHandle, newOrder) => {
               setTreeData((prev) =>
@@ -2678,13 +2689,23 @@ function EditorPanel({
                         className="p-0.5 rounded hover:bg-red-100 text-red-500"
                         title="Xóa liên kết"
                         onClick={() => {
-                          if (
-                            confirm(
-                              `Xóa "${child.displayName}" khỏi danh sách con?`,
-                            )
-                          ) {
-                            onRemoveChild(child.handle, parentFamily.handle);
-                          }
+                          toast("Xác nhận xóa", {
+                            description: `Xóa "${child.displayName}" khỏi danh sách con?`,
+                            action: {
+                              label: "Xóa",
+                              onClick: () => {
+                                onRemoveChild(
+                                  child.handle,
+                                  parentFamily.handle,
+                                );
+                                toast.success("Đã xóa khỏi danh sách");
+                              },
+                            },
+                            cancel: {
+                              label: "Hủy",
+                              onClick: () => {},
+                            },
+                          });
                         }}
                       >
                         <Trash2 className="h-3 w-3" />

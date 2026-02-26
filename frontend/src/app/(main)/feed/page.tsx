@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import {
   Newspaper,
   MessageCircle,
@@ -12,6 +13,7 @@ import {
   Image as ImageIcon,
   X,
   Play,
+  Edit,
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -96,13 +98,14 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
         body: body.trim(),
         media: mediaList.length > 0 ? mediaList : null,
         type: "general",
-        status: "published",
+        status: "pending",
       });
       if (!error) {
         setBody("");
         setTitle("");
         setMediaList([]);
         setExpanded(false);
+        toast.success("Bài viết đã được gửi và đang chờ Admin phê duyệt.");
         onPostCreated();
       }
     } finally {
@@ -115,7 +118,10 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
     const newItem: MediaItem = {
       url: info.secure_url,
       public_id: info.public_id,
-      mime_type: info.resource_type === "video" ? `video/${info.format}` : `image/${info.format}`,
+      mime_type:
+        info.resource_type === "video"
+          ? `video/${info.format}`
+          : `image/${info.format}`,
     };
     setMediaList((prev) => [...prev, newItem]);
     setExpanded(true);
@@ -129,7 +135,13 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
         <div className="flex gap-3 sm:gap-4">
           <div className="h-10 w-10 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center overflow-hidden relative border border-primary/5">
             {profile?.avatar_url ? (
-              <Image src={profile.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+              <Image
+                src={profile.avatar_url}
+                alt="Avatar"
+                fill
+                className="object-cover"
+                unoptimized
+              />
             ) : (
               <User className="h-5 w-5 text-primary" />
             )}
@@ -155,14 +167,26 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
             {mediaList.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {mediaList.map((m, idx) => (
-                  <div key={idx} className="relative group h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden ring-1 ring-black/5">
+                  <div
+                    key={idx}
+                    className="relative group h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden ring-1 ring-black/5"
+                  >
                     {m.mime_type.startsWith("image") ? (
-                      <CldImage src={m.public_id} alt="Preview" fill className="object-cover" />
+                      <CldImage
+                        src={m.public_id}
+                        alt="Preview"
+                        fill
+                        className="object-cover"
+                      />
                     ) : (
-                      <div className="h-full w-full bg-black/10 flex items-center justify-center"><Play className="h-5 w-5 text-primary" /></div>
+                      <div className="h-full w-full bg-black/10 flex items-center justify-center">
+                        <Play className="h-5 w-5 text-primary" />
+                      </div>
                     )}
                     <button
-                      onClick={() => setMediaList(prev => prev.filter((_, i) => i !== idx))}
+                      onClick={() =>
+                        setMediaList((prev) => prev.filter((_, i) => i !== idx))
+                      }
                       className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                     >
                       <X className="h-3 w-3" />
@@ -179,10 +203,20 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
                   onSuccess={handleUploadSuccess}
                   onUploadAdded={() => setUploading(true)}
                   onQueuesEnd={() => setUploading(false)}
-                  options={{ sources: ["local", "url", "camera"], multiple: true, maxFiles: 10 }}
+                  options={{
+                    sources: ["local", "url", "camera"],
+                    multiple: true,
+                    maxFiles: 10,
+                  }}
                 >
                   {({ open }) => (
-                    <Button variant="ghost" size="sm" onClick={() => open()} disabled={uploading} className="rounded-full justify-start sm:justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => open()}
+                      disabled={uploading}
+                      className="rounded-full justify-start sm:justify-center"
+                    >
                       <ImageIcon className="h-4 w-4 mr-2 text-primary" />
                       Thêm ảnh/video
                     </Button>
@@ -190,8 +224,23 @@ function PostComposer({ onPostCreated }: { onPostCreated: () => void }) {
                 </CldUploadWidget>
 
                 <div className="flex gap-2 ml-auto">
-                  <Button variant="ghost" size="sm" onClick={() => { setExpanded(false); setMediaList([]); }} className="rounded-full">Hủy</Button>
-                  <Button size="sm" onClick={handleSubmit} disabled={!body.trim() || submitting || uploading} className="rounded-full px-6 shadow-md shadow-primary/10">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setExpanded(false);
+                      setMediaList([]);
+                    }}
+                    className="rounded-full"
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSubmit}
+                    disabled={!body.trim() || submitting || uploading}
+                    className="rounded-full px-6 shadow-md shadow-primary/10"
+                  >
                     <Send className="mr-2 h-4 w-4" />
                     {submitting ? "Đang gửi..." : "Đăng bài"}
                   </Button>
@@ -211,29 +260,90 @@ function CommentSection({ postId }: { postId: string }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
 
   const fetchComments = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: commentsData } = await supabase.from("comments").select("*").eq("post_id", postId).order("created_at", { ascending: true });
+      const { data: commentsData } = await supabase
+        .from("comments")
+        .select("*")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });
       if (!commentsData) return;
 
-      const authorIds = [...new Set(commentsData.map((c) => c.author_id).filter(Boolean))];
+      const authorIds = [
+        ...new Set(commentsData.map((c) => c.author_id).filter(Boolean)),
+      ];
       let profileMap: Record<string, any> = {};
 
       if (authorIds.length > 0) {
-        const { data: profilesData } = await supabase.from("profiles").select("id, email, display_name, avatar_url").in("id", authorIds);
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, email, display_name, avatar_url")
+          .in("id", authorIds);
         profilesData?.forEach((p) => (profileMap[p.id] = p));
       }
 
-      const merged = commentsData.map((c) => ({ ...c, author: profileMap[c.author_id] }));
+      const merged = commentsData.map((c) => ({
+        ...c,
+        author: profileMap[c.author_id],
+      }));
       setComments(merged as Comment[]);
     } finally {
       setLoading(false);
     }
   }, [postId]);
 
-  useEffect(() => { fetchComments(); }, [fetchComments]);
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
+
+  const handleDeleteComment = async (commentId: string) => {
+    toast("Bạn có chắc chắn muốn xóa bình luận này?", {
+      action: {
+        label: "Xóa",
+        onClick: async () => {
+          const { error } = await supabase
+            .from("comments")
+            .delete()
+            .eq("id", commentId);
+          if (!error) {
+            toast.success("Đã xóa bình luận");
+            fetchComments();
+          } else {
+            toast.error("Lỗi khi xóa bình luận");
+          }
+        },
+      },
+      cancel: {
+        label: "Hủy",
+        onClick: () => {},
+      },
+    });
+  };
+
+  const startEditing = (c: Comment) => {
+    setEditingId(c.id);
+    setEditContent(c.content);
+  };
+
+  const handleUpdateComment = async () => {
+    if (!editContent.trim() || !editingId) return;
+    const { error } = await supabase
+      .from("comments")
+      .update({ content: editContent.trim() })
+      .eq("id", editingId);
+    if (!error) {
+      toast.success("Đã cập nhật bình luận");
+      setEditingId(null);
+      setEditContent("");
+      fetchComments();
+    } else {
+      toast.error("Lỗi khi cập nhật bình luận");
+    }
+  };
 
   const handleSubmit = async () => {
     if (!newComment.trim() || !user) return;
@@ -243,7 +353,10 @@ function CommentSection({ postId }: { postId: string }) {
       author_name: profile?.display_name || user.email?.split("@")[0],
       content: newComment.trim(),
     });
-    if (!error) { setNewComment(""); fetchComments(); }
+    if (!error) {
+      setNewComment("");
+      fetchComments();
+    }
   };
 
   return (
@@ -259,20 +372,78 @@ function CommentSection({ postId }: { postId: string }) {
             <div key={c.id} className="flex gap-3 group">
               <div className="h-8 w-8 rounded-xl bg-primary/5 shrink-0 relative overflow-hidden border border-black/5 mt-1">
                 {c.author?.avatar_url ? (
-                  <Image src={c.author.avatar_url} alt="Avt" fill className="object-cover" unoptimized />
+                  <Image
+                    src={c.author.avatar_url}
+                    alt="Avt"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
                 ) : (
-                  <div className="flex items-center justify-center h-full w-full text-primary/40"><User className="h-4 w-4" /></div>
+                  <div className="flex items-center justify-center h-full w-full text-primary/40">
+                    <User className="h-4 w-4" />
+                  </div>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="bg-muted/30 p-3 rounded-2xl rounded-tl-none inline-block max-w-full">
-                  <p className="text-[11px] font-bold text-primary mb-0.5 truncate">
-                    {c.author_name || c.author?.display_name || "Thành viên"}
-                  </p>
-                  <p className="text-sm leading-relaxed break-words">{c.content}</p>
+                <div className="bg-muted/30 p-3 rounded-2xl rounded-tl-none inline-block max-w-full relative group/comment">
+                  <div className="flex justify-between items-start gap-4">
+                    <p className="text-[11px] font-bold text-primary mb-0.5 truncate">
+                      {c.author_name || c.author?.display_name || "Thành viên"}
+                    </p>
+                    {user && user.id === c.author_id && (
+                      <div className="opacity-0 group-hover/comment:opacity-100 transition-opacity flex items-center gap-1 -mt-1 -mr-1">
+                        <button
+                          onClick={() => startEditing(c)}
+                          className="p-1 hover:bg-black/5 rounded-md text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteComment(c.id)}
+                          className="p-1 hover:bg-black/5 rounded-md text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {editingId === c.id ? (
+                    <div className="mt-2 flex flex-col gap-2 min-w-50">
+                      <Textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="min-h-15 text-sm p-2 resize-none"
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingId(null)}
+                          className="h-7 text-xs px-2"
+                        >
+                          Hủy
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleUpdateComment}
+                          className="h-7 text-xs px-2"
+                        >
+                          Lưu
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {c.content}
+                    </p>
+                  )}
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1 ml-1 opacity-70">
-                  {new Date(c.created_at).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(c.created_at).toLocaleTimeString("vi-VN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </p>
               </div>
             </div>
@@ -288,7 +459,12 @@ function CommentSection({ postId }: { postId: string }) {
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             className="rounded-full bg-muted/50 border-0 focus-visible:ring-1 ring-primary/30 h-10 text-sm"
           />
-          <Button size="icon" onClick={handleSubmit} disabled={!newComment.trim()} className="rounded-full shrink-0 h-10 w-10 shadow-sm">
+          <Button
+            size="icon"
+            onClick={handleSubmit}
+            disabled={!newComment.trim()}
+            className="rounded-full shrink-0 h-10 w-10 shadow-sm"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>
@@ -298,7 +474,15 @@ function CommentSection({ postId }: { postId: string }) {
 }
 
 // === Post Card ===
-function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: () => void; onMediaClick: (m: MediaItem) => void }) {
+function PostCard({
+  post,
+  onRefresh,
+  onMediaClick,
+}: {
+  post: Post;
+  onRefresh: () => void;
+  onMediaClick: (m: MediaItem) => void;
+}) {
   const { user, isAdmin, isLoggedIn } = useAuth();
   const [showComments, setShowComments] = useState(false);
   const [isLiked, setIsLiked] = useState(post.is_liked || false);
@@ -310,14 +494,36 @@ function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: ()
     setLikeCount(post.like_count || 0);
   }, [post.is_liked, post.like_count]);
 
-  const handleDelete = async () => {
-    if (!confirm("Bạn có chắc xoá bài viết này không?")) return;
-    const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (!error) onRefresh();
+  const handleDelete = () => {
+    toast("Xác nhận xóa", {
+      description: "Bạn có chắc xoá bài viết này không?",
+      action: {
+        label: "Xóa",
+        onClick: async () => {
+          const { error } = await supabase
+            .from("posts")
+            .delete()
+            .eq("id", post.id);
+          if (!error) {
+            onRefresh();
+            toast.success("Đã xoá bài viết");
+          } else {
+            toast.error("Lỗi khi xoá bài viết");
+          }
+        },
+      },
+      cancel: {
+        label: "Hủy",
+        onClick: () => {},
+      },
+    });
   };
 
   const handleTogglePin = async () => {
-    const { error } = await supabase.from("posts").update({ is_pinned: !post.is_pinned }).eq("id", post.id);
+    const { error } = await supabase
+      .from("posts")
+      .update({ is_pinned: !post.is_pinned })
+      .eq("id", post.id);
     if (!error) onRefresh();
   };
 
@@ -326,13 +532,19 @@ function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: ()
     setIsLiking(true);
     const newStatus = !isLiked;
     setIsLiked(newStatus);
-    setLikeCount(prev => newStatus ? prev + 1 : Math.max(0, prev - 1));
+    setLikeCount((prev) => (newStatus ? prev + 1 : Math.max(0, prev - 1)));
 
     try {
       if (newStatus) {
-        await supabase.from("post_likes").insert({ post_id: post.id, user_id: user.id });
+        await supabase
+          .from("post_likes")
+          .insert({ post_id: post.id, user_id: user.id });
       } else {
-        await supabase.from("post_likes").delete().eq("post_id", post.id).eq("user_id", user.id);
+        await supabase
+          .from("post_likes")
+          .delete()
+          .eq("post_id", post.id)
+          .eq("user_id", user.id);
       }
     } catch {
       setIsLiked(!newStatus);
@@ -342,16 +554,24 @@ function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: ()
   };
 
   return (
-    <Card className={cn(
-      "border-transparent bg-muted/50 rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-lg",
-      post.is_pinned && "ring-2 ring-primary/20 bg-primary/5 shadow-sm"
-    )}>
+    <Card
+      className={cn(
+        "border-transparent bg-muted/50 rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-lg",
+        post.is_pinned && "ring-2 ring-primary/20 bg-primary/5 shadow-sm",
+      )}
+    >
       <CardHeader className="p-4 sm:p-5 pb-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-primary/10 flex items-center justify-center overflow-hidden relative shrink-0 border border-primary/5">
               {post.author?.avatar_url ? (
-                <Image src={post.author.avatar_url} alt="Avatar" fill className="object-cover" unoptimized />
+                <Image
+                  src={post.author.avatar_url}
+                  alt="Avatar"
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
               ) : (
                 <User className="h-6 w-6 text-primary" />
               )}
@@ -361,18 +581,38 @@ function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: ()
                 {post.author_name || post.author?.display_name || "Thành viên"}
               </p>
               <p className="text-[11px] sm:text-[12px] text-muted-foreground mt-0.5">
-                {new Date(post.created_at).toLocaleDateString("vi-VN", { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {new Date(post.created_at).toLocaleDateString("vi-VN", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </p>
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
             {isAdmin && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full" onClick={handleTogglePin}>
-                <Pin className={cn("h-4 w-4", post.is_pinned && "text-primary fill-primary")} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-full"
+                onClick={handleTogglePin}
+              >
+                <Pin
+                  className={cn(
+                    "h-4 w-4",
+                    post.is_pinned && "text-primary fill-primary",
+                  )}
+                />
               </Button>
             )}
             {(isAdmin || user?.id === post.author_id) && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-full hover:text-destructive hover:bg-destructive/10"
+                onClick={handleDelete}
+              >
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
@@ -380,29 +620,56 @@ function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: ()
         </div>
       </CardHeader>
       <CardContent className="p-4 sm:p-5 pt-0">
-        {post.is_pinned && <Badge className="mb-3 bg-primary/10 text-primary border-0 rounded-full text-[10px] px-2 py-0">📌 GHIM</Badge>}
-        {post.title && <h3 className="text-base sm:text-lg font-extrabold mb-2 leading-tight break-words">{post.title}</h3>}
-        <p className="text-[14px] sm:text-[15px] whitespace-pre-wrap text-foreground/80 leading-relaxed mb-4 break-words">{post.body}</p>
-        
+        {post.is_pinned && (
+          <Badge className="mb-3 bg-primary/10 text-primary border-0 rounded-full text-[10px] px-2 py-0">
+            📌 GHIM
+          </Badge>
+        )}
+        {post.title && (
+          <h3 className="text-base sm:text-lg font-extrabold mb-2 leading-tight break-words">
+            {post.title}
+          </h3>
+        )}
+        <p className="text-[14px] sm:text-[15px] whitespace-pre-wrap text-foreground/80 leading-relaxed mb-4 break-words">
+          {post.body}
+        </p>
+
         {post.media && post.media.length > 0 && (
-          <div className={cn("grid gap-1.5 sm:gap-2 rounded-2xl overflow-hidden border border-black/5", 
-            post.media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+          <div
+            className={cn(
+              "grid gap-1.5 sm:gap-2 rounded-2xl overflow-hidden border border-black/5",
+              post.media.length === 1 ? "grid-cols-1" : "grid-cols-2",
+            )}
+          >
             {post.media.slice(0, 4).map((m, i) => (
-              <div 
-                key={i} 
-                className={cn("relative bg-muted cursor-pointer aspect-square overflow-hidden", post.media?.length === 1 && "aspect-video")}
+              <div
+                key={i}
+                className={cn(
+                  "relative bg-muted cursor-pointer aspect-square overflow-hidden",
+                  post.media?.length === 1 && "aspect-video",
+                )}
                 onClick={() => onMediaClick(m)}
               >
                 {m.mime_type.startsWith("image") ? (
-                  <CldImage src={m.public_id} alt="Content" fill className="object-cover hover:scale-110 transition-transform duration-700 ease-out" />
+                  <CldImage
+                    src={m.public_id}
+                    alt="Content"
+                    fill
+                    className="object-cover hover:scale-110 transition-transform duration-700 ease-out"
+                  />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-black/10">
-                    <video src={m.url} className="w-full h-full object-cover opacity-50" />
+                    <video
+                      src={m.url}
+                      className="w-full h-full object-cover opacity-50"
+                    />
                     <Play className="absolute h-10 w-10 text-white drop-shadow-lg" />
                   </div>
                 )}
                 {post.media!.length > 4 && i === 3 && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]">+{post.media!.length - 4}</div>
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-[2px]">
+                    +{post.media!.length - 4}
+                  </div>
                 )}
               </div>
             ))}
@@ -410,23 +677,38 @@ function PostCard({ post, onRefresh, onMediaClick }: { post: Post; onRefresh: ()
         )}
 
         <div className="flex gap-2 sm:gap-4 mt-5 pt-4 border-t border-muted-foreground/10">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleToggleLike} 
-            className={cn("rounded-xl flex-1 h-10 transition-all", isLiked ? "text-rose-600 bg-rose-50 hover:bg-rose-100" : "text-muted-foreground")}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleToggleLike}
+            className={cn(
+              "rounded-xl flex-1 h-10 transition-all",
+              isLiked
+                ? "text-rose-600 bg-rose-50 hover:bg-rose-100"
+                : "text-muted-foreground",
+            )}
           >
-            <Heart className={cn("mr-2 h-4 w-4 sm:h-5 sm:w-5 transition-transform", isLiked && "fill-current scale-110")} />
+            <Heart
+              className={cn(
+                "mr-2 h-4 w-4 sm:h-5 sm:w-5 transition-transform",
+                isLiked && "fill-current scale-110",
+              )}
+            />
             <span className="text-xs sm:text-sm">{likeCount || ""} Thích</span>
           </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setShowComments(!showComments)} 
-            className={cn("rounded-xl flex-1 h-10 transition-all text-muted-foreground", showComments && "bg-primary/5 text-primary")}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowComments(!showComments)}
+            className={cn(
+              "rounded-xl flex-1 h-10 transition-all text-muted-foreground",
+              showComments && "bg-primary/5 text-primary",
+            )}
           >
             <MessageCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="text-xs sm:text-sm">{post.comment_count || ""} Bình luận</span>
+            <span className="text-xs sm:text-sm">
+              {post.comment_count || ""} Bình luận
+            </span>
           </Button>
         </div>
 
@@ -446,23 +728,43 @@ export default function FeedPage() {
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: postsData } = await supabase.from("posts").select("*").eq("status", "published").order("is_pinned", { ascending: false }).order("created_at", { ascending: false });
-      if (!postsData || postsData.length === 0) { setPosts([]); return; }
+      const { data: postsData } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("status", "published")
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (!postsData || postsData.length === 0) {
+        setPosts([]);
+        return;
+      }
 
       const postIds = postsData.map((p) => p.id);
-      const authorIds = [...new Set(postsData.map((p) => p.author_id).filter(Boolean))];
+      const authorIds = [
+        ...new Set(postsData.map((p) => p.author_id).filter(Boolean)),
+      ];
 
       const [profilesRes, commentsRes, likesRes] = await Promise.all([
-        authorIds.length > 0 ? supabase.from("profiles").select("id, email, display_name, role, avatar_url").in("id", authorIds) : Promise.resolve({ data: [] }),
+        authorIds.length > 0
+          ? supabase
+              .from("profiles")
+              .select("id, email, display_name, role, avatar_url")
+              .in("id", authorIds)
+          : Promise.resolve({ data: [] }),
         supabase.from("comments").select("post_id").in("post_id", postIds),
-        supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+        supabase
+          .from("post_likes")
+          .select("post_id, user_id")
+          .in("post_id", postIds),
       ]);
 
       const profileMap: Record<string, any> = {};
       profilesRes.data?.forEach((p: any) => (profileMap[p.id] = p));
 
       const countMap: Record<string, number> = {};
-      commentsRes.data?.forEach((c: any) => (countMap[c.post_id] = (countMap[c.post_id] || 0) + 1));
+      commentsRes.data?.forEach(
+        (c: any) => (countMap[c.post_id] = (countMap[c.post_id] || 0) + 1),
+      );
 
       const likeCountMap: Record<string, number> = {};
       const userLikedSet = new Set<string>();
@@ -485,7 +787,9 @@ export default function FeedPage() {
     }
   }, [user]);
 
-  useEffect(() => { if (!authLoading) fetchPosts(); }, [fetchPosts, authLoading]);
+  useEffect(() => {
+    if (!authLoading) fetchPosts();
+  }, [fetchPosts, authLoading]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8 pb-20 px-4">
@@ -496,7 +800,10 @@ export default function FeedPage() {
             <Newspaper className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
             Bảng tin nội bộ
           </h1>
-          <p className="text-muted-foreground mt-2 text-sm sm:text-base max-w-md">Kết nối tình cảm gia đình, chia sẻ những khoảnh khắc và thông báo quan trọng của dòng tộc.</p>
+          <p className="text-muted-foreground mt-2 text-sm sm:text-base max-w-md">
+            Kết nối tình cảm gia đình, chia sẻ những khoảnh khắc và thông báo
+            quan trọng của dòng tộc.
+          </p>
         </div>
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 sm:w-64 sm:h-64 bg-primary/15 rounded-full blur-3xl pointer-events-none opacity-60" />
       </div>
@@ -507,32 +814,52 @@ export default function FeedPage() {
         <div className="space-y-6">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="bg-muted/20 p-6 rounded-3xl space-y-4">
-               <div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-xl" /><div className="space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-20" /></div></div>
-               <Skeleton className="h-32 w-full rounded-2xl" />
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+              <Skeleton className="h-32 w-full rounded-2xl" />
             </div>
           ))}
         </div>
       ) : posts.length === 0 ? (
         <div className="text-center py-20 bg-muted/10 rounded-3xl border-2 border-dashed border-muted/30">
           <Newspaper className="h-12 w-12 text-muted-foreground/20 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-muted-foreground">Chưa có bài viết</h3>
-          <p className="text-sm text-muted-foreground/60">Hãy là người đầu tiên chia sẻ kỷ niệm tại đây.</p>
+          <h3 className="text-lg font-bold text-muted-foreground">
+            Chưa có bài viết
+          </h3>
+          <p className="text-sm text-muted-foreground/60">
+            Hãy là người đầu tiên chia sẻ kỷ niệm tại đây.
+          </p>
         </div>
       ) : (
         <div className="space-y-6 sm:space-y-8">
           {posts.map((post) => (
-            <PostCard key={post.id} post={post} onRefresh={fetchPosts} onMediaClick={setSelectedMedia} />
+            <PostCard
+              key={post.id}
+              post={post}
+              onRefresh={fetchPosts}
+              onMediaClick={setSelectedMedia}
+            />
           ))}
         </div>
       )}
 
       {/* Lightbox Modal logic an toàn */}
-      <Dialog open={!!selectedMedia} onOpenChange={() => setSelectedMedia(null)}>
+      <Dialog
+        open={!!selectedMedia}
+        onOpenChange={() => setSelectedMedia(null)}
+      >
         <DialogContent className="max-w-5xl p-0 bg-black/95 border-none shadow-none rounded-2xl sm:rounded-3xl overflow-hidden h-[auto] sm:h-[90vh]">
-          <DialogHeader className="sr-only"><DialogTitle>Xem ảnh/video</DialogTitle></DialogHeader>
+          <DialogHeader className="sr-only">
+            <DialogTitle>Xem ảnh/video</DialogTitle>
+          </DialogHeader>
           {selectedMedia && (
             <div className="relative w-full h-full flex flex-col items-center justify-center p-2">
-              <button 
+              <button
                 onClick={() => setSelectedMedia(null)}
                 className="absolute top-4 right-4 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
               >
@@ -540,10 +867,21 @@ export default function FeedPage() {
               </button>
               {selectedMedia.mime_type?.startsWith("image") ? (
                 <div className="relative w-full h-full min-h-[300px]">
-                   <CldImage src={selectedMedia.public_id} alt="Full" fill className="object-contain" unoptimized />
+                  <CldImage
+                    src={selectedMedia.public_id}
+                    alt="Full"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
                 </div>
               ) : (
-                <video src={selectedMedia.url} controls autoPlay className="max-h-full w-full rounded-xl shadow-2xl" />
+                <video
+                  src={selectedMedia.url}
+                  controls
+                  autoPlay
+                  className="max-h-full w-full rounded-xl shadow-2xl"
+                />
               )}
             </div>
           )}
