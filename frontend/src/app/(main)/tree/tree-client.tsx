@@ -1557,7 +1557,7 @@ export default function TreeViewPage() {
                 );
               }
             }}
-            onDeletePerson={(handle) => {
+            onDeletePerson={async (handle) => {
               toast("Xóa thành viên", {
                 description:
                   "Bạn có chắc chắn muốn xóa thành viên này hoàn toàn khỏi cơ sở dữ liệu?",
