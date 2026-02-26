@@ -1132,14 +1132,35 @@ export default function AdminPeoplePage() {
                     {people
                       .filter(
                         (p) =>
-                          p.gender === 1 && p.handle !== editPerson?.handle,
+                          p.gender === 1 &&
+                          p.handle !== editPerson?.handle &&
+                          (form.generation > 1
+                            ? p.generation === form.generation - 1
+                            : true),
                       )
                       .sort((a, b) => a.generation - b.generation)
-                      .map((p) => (
-                        <option key={p.handle} value={p.handle}>
-                          Đời {p.generation} · {p.display_name}
-                        </option>
-                      ))}
+                      .map((p) => {
+                        let spouseName = "";
+                        const fam = families.find(
+                          (f) =>
+                            f.father_handle === p.handle && f.mother_handle,
+                        );
+                        if (fam && fam.mother_handle) {
+                          const spouse = people.find(
+                            (sp) => sp.handle === fam.mother_handle,
+                          );
+                          if (spouse) {
+                            spouseName = ` (${spouse.display_name})`;
+                          }
+                        }
+
+                        return (
+                          <option key={p.handle} value={p.handle}>
+                            Đời {p.generation} · {p.display_name}
+                            {spouseName}
+                          </option>
+                        );
+                      })}
                   </select>
                 </div>
 
@@ -1165,15 +1186,34 @@ export default function AdminPeoplePage() {
                       .filter(
                         (p) =>
                           p.gender === 2 &&
-                          p.is_patrilineal &&
-                          p.handle !== editPerson?.handle,
+                          p.handle !== editPerson?.handle &&
+                          (form.generation > 1
+                            ? p.generation === form.generation - 1
+                            : true),
                       )
                       .sort((a, b) => a.generation - b.generation)
-                      .map((p) => (
-                        <option key={p.handle} value={p.handle}>
-                          Đời {p.generation} · {p.display_name}
-                        </option>
-                      ))}
+                      .map((p) => {
+                        let husbandName = "";
+                        const fam = families.find(
+                          (f) =>
+                            f.mother_handle === p.handle && f.father_handle,
+                        );
+                        if (fam && fam.father_handle) {
+                          const husband = people.find(
+                            (hp) => hp.handle === fam.father_handle,
+                          );
+                          if (husband) {
+                            husbandName = ` (${husband.display_name})`;
+                          }
+                        }
+
+                        return (
+                          <option key={p.handle} value={p.handle}>
+                            Đời {p.generation} · {p.display_name}
+                            {husbandName}
+                          </option>
+                        );
+                      })}
                   </select>
                 </div>
               </div>

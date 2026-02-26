@@ -22,6 +22,8 @@ export interface TreeNode {
   isPatrilineal: boolean;
   families: string[];
   parentFamilies: string[];
+  birthOrderLabel?: string;
+  chiLabel?: string;
 }
 
 export interface TreeFamily {
@@ -65,8 +67,8 @@ export interface LayoutResult {
 }
 
 // Sizing
-export const CARD_W = 180;
-export const CARD_H = 80;
+export const CARD_W = 210;
+export const CARD_H = 92;
 export const H_SPACE = 24;
 export const V_SPACE = 80;
 export const COUPLE_GAP = 8;
@@ -392,10 +394,11 @@ function assignPositions(
   }
 
   // Place spouse (right of patrilineal)
+  const spouseCardLeft = patriCenterX + CARD_W / 2 + COUPLE_GAP;
   if (spouse && !placed.has(spouse.handle)) {
     allNodes.push({
       node: spouse,
-      x: patriCenterX + CARD_W / 2 + COUPLE_GAP,
+      x: spouseCardLeft,
       y,
       generation,
     });

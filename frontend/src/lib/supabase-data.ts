@@ -76,6 +76,98 @@ export async function fetchTreeData(): Promise<{
     fetchPeople(),
     fetchFamilies(),
   ]);
+
+  // Compute birth order labels (Trưởng/Thứ)
+  const personMap = new Map(people.map((p) => [p.handle, p]));
+  const familyMap = new Map(families.map((f) => [f.handle, f]));
+
+  // 1. Identify "Trưởng nam/Thứ nam" for everyone within their family
+  for (const person of people) {
+    if (!person.parentFamilies || person.parentFamilies.length === 0) continue;
+
+    const pfHandle = person.parentFamilies[0];
+    const parentFamily = familyMap.get(pfHandle);
+    if (!parentFamily || !parentFamily.children) continue;
+
+    const males: string[] = [];
+    const females: string[] = [];
+
+    for (const childHandle of parentFamily.children) {
+      const child = personMap.get(childHandle);
+      if (!child) continue;
+      if (child.gender === 1) males.push(childHandle);
+      else if (child.gender === 2) females.push(childHandle);
+    }
+
+    if (person.gender === 1) {
+      const mIndex = males.indexOf(person.handle);
+      if (mIndex === 0) {
+        person.birthOrderLabel = "Trưởng Nam";
+      } else if (mIndex > 0) {
+        person.birthOrderLabel = `Thứ Nam ${mIndex + 1}`;
+      }
+    } else if (person.gender === 2) {
+      const fIndex = females.indexOf(person.handle);
+      if (fIndex === 0) {
+        person.birthOrderLabel = "Trưởng Nữ";
+      } else if (fIndex > 0) {
+        person.birthOrderLabel = `Thứ Nữ ${fIndex + 1}`;
+      }
+    }
+  }
+
+  // 2. Identify "Chi" (Branch) based on lineage from the root (Thủy Tổ)
+  // Roots are people with no parentFamilies (or parents not in the tree)
+  const childOfAnyFamily = new Set<string>();
+  for (const f of families) {
+    for (const ch of f.children) childOfAnyFamily.add(ch);
+  }
+  const roots = people.filter(
+    (p) => p.isPatrilineal && !childOfAnyFamily.has(p.handle),
+  );
+
+  // Determine Chi recursively.
+  // The root ancestor has no Chi label.
+  // Their first son is the start of "Chi Trưởng" (and all their first-son descendants are Chi Trưởng).
+  // Their second son is the start of "Chi 2", third son "Chi 3", etc.
+  for (const root of roots) {
+    for (const famId of root.families) {
+      const fam = familyMap.get(famId);
+      if (!fam) continue;
+
+      // Filter to only sons in the family of the root
+      const rootSons = fam.children
+        .map((ch) => personMap.get(ch))
+        .filter((p) => p && p.gender === 1) as TreeNode[];
+
+      for (let i = 0; i < rootSons.length; i++) {
+        const son = rootSons[i];
+        const chiLabel = i === 0 ? "Chi Trưởng" : `Chi ${i + 1}`;
+
+        // Push this Chi label down to all male descendants in this line
+        const queue = [son.handle];
+        while (queue.length > 0) {
+          const currId = queue.shift()!;
+          const currPerson = personMap.get(currId);
+          if (currPerson) {
+            (currPerson as any).chiLabel = chiLabel;
+
+            for (const fId of currPerson.families) {
+              const currFam = familyMap.get(fId);
+              if (!currFam) continue;
+              const maleDescendants = currFam.children
+                .map((ch) => personMap.get(ch))
+                .filter((p) => p && p.gender === 1);
+              for (const m of maleDescendants) {
+                if (m) queue.push(m.handle);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   return { people, families };
 }
 

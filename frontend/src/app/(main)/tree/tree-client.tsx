@@ -2019,9 +2019,27 @@ function PersonCard({
             <p className="font-semibold text-[10px] leading-tight text-slate-800 truncate">
               {node.displayName}
             </p>
-            <span className="text-[8px] font-semibold px-0.5 py-px rounded bg-amber-100 text-amber-700">
-              Đời {item.generation + 1}
-            </span>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[8px] font-semibold px-0.5 py-px rounded bg-amber-100 text-amber-700">
+                Đ{item.generation + 1}
+              </span>
+              {node.chiLabel && (
+                <span
+                  className="text-[8px] font-medium px-0.5 py-px rounded bg-indigo-100 text-indigo-700 truncate max-w-16"
+                  title={node.chiLabel}
+                >
+                  {node.chiLabel}
+                </span>
+              )}
+              {node.birthOrderLabel && (
+                <span
+                  className="text-[8px] font-medium px-0.5 py-px rounded bg-blue-100 text-blue-700 truncate max-w-16"
+                  title={node.birthOrderLabel}
+                >
+                  {node.birthOrderLabel}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {/* Collapse toggle */}
@@ -2085,14 +2103,30 @@ function PersonCard({
               ? `${node.birthYear}${node.deathYear ? ` — ${node.deathYear}` : node.isLiving ? " — nay" : ""}`
               : "—"}
           </p>
-          <div className="mt-0.5 flex items-center gap-1">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1">
             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200/60">
               Đời {item.generation + 1}
             </span>
+            {node.chiLabel && (
+              <span
+                className="text-[9px] font-semibold px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200/60 truncate max-w-20"
+                title={node.chiLabel}
+              >
+                {node.chiLabel}
+              </span>
+            )}
+            {node.birthOrderLabel && (
+              <span
+                className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200/60 truncate max-w-20"
+                title={node.birthOrderLabel}
+              >
+                {node.birthOrderLabel}
+              </span>
+            )}
             {isDead ? (
               <span className="text-[9px] text-slate-400">✝ Đã mất</span>
             ) : (
-              <span className="text-[9px] text-emerald-600 font-medium">
+              <span className="text-[9px] text-emerald-600 font-medium whitespace-nowrap">
                 ● Còn sống
               </span>
             )}
