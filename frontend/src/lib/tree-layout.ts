@@ -84,11 +84,9 @@ interface Contour {
 }
 
 interface Subtree {
-  family: TreeFamily;
-  father?: TreeNode;
-  mother?: TreeNode;
+  families: TreeFamily[];
   patrilineal?: TreeNode;
-  spouse?: TreeNode;
+  spouses: TreeNode[];
   children: ChildItem[];
   width: number; // total pixel width needed for this subtree
   anchorX: number; // patrilineal person card center X from left edge of subtree
@@ -144,56 +142,97 @@ function mergeContours(
 }
 
 // ═══ Step 1: Build subtree recursively, compute widths bottom-up ═══
-//
-// STRICT RULES:
-//   Rule 1: Single child → child card center == parent card center (same column)
-//   Rule 2: N children → parent card center == midpoint of(first child center, last child center)
-//
 
 function buildSubtree(
-  family: TreeFamily,
+  patri: TreeNode | undefined,
+  familyGroup: TreeFamily[],
   personMap: Map<string, TreeNode>,
   familyMap: Map<string, TreeFamily>,
   visited: Set<string>,
 ): Subtree | null {
-  if (visited.has(family.handle)) return null;
-  visited.add(family.handle);
+  const familiesToProcess = familyGroup.filter((f) => !visited.has(f.handle));
+  if (familiesToProcess.length === 0) return null;
 
-  const father = family.fatherHandle
-    ? personMap.get(family.fatherHandle)
-    : undefined;
-  const mother = family.motherHandle
-    ? personMap.get(family.motherHandle)
-    : undefined;
-  const patrilineal = father?.isPatrilineal
-    ? father
-    : mother?.isPatrilineal
-      ? mother
-      : father || mother;
-  const spouse = patrilineal === father ? mother : father;
+  for (const f of familiesToProcess) visited.add(f.handle);
+
+  const spouses: TreeNode[] = [];
+
+  // Identify spouse for each family
+  const familiesWithSpouse = familiesToProcess.map((f) => {
+    const fNode = f.fatherHandle ? personMap.get(f.fatherHandle) : undefined;
+    const mNode = f.motherHandle ? personMap.get(f.motherHandle) : undefined;
+    const sp = patri === fNode ? mNode : fNode;
+    return { family: f, spouse: sp };
+  });
+
+  // Sort families to put oldest wife first
+  familiesWithSpouse.sort((a, b) => {
+    const yA = a.spouse?.birthYear ?? Infinity;
+    const yB = b.spouse?.birthYear ?? Infinity;
+    if (yA !== yB) return yA - yB;
+    return 0;
+  });
+
+  const sortedFamilies = familiesWithSpouse.map((x) => x.family);
+  for (const x of familiesWithSpouse) {
+    if (x.spouse) spouses.push(x.spouse);
+  }
 
   const children: ChildItem[] = [];
 
-  for (const childHandle of family.children) {
-    const child = personMap.get(childHandle);
-    if (!child) continue;
+  for (const fam of sortedFamilies) {
+    for (const childHandle of fam.children) {
+      const child = personMap.get(childHandle);
+      if (!child) continue;
 
-    // Find child's own family (where child is a parent)
-    const childFamily = Array.from(familyMap.values()).find(
-      (f) =>
-        !visited.has(f.handle) &&
-        (f.fatherHandle === childHandle || f.motherHandle === childHandle),
-    );
+      // Find ALL child's own families
+      const childFamilies = Array.from(familyMap.values()).filter(
+        (f) =>
+          !visited.has(f.handle) &&
+          (f.fatherHandle === childHandle || f.motherHandle === childHandle),
+      );
 
-    if (childFamily) {
-      const sub = buildSubtree(childFamily, personMap, familyMap, visited);
-      if (sub) {
-        children.push({
-          subtree: sub,
-          width: sub.width,
-          anchorX: sub.anchorX,
-          contour: sub.contour,
-        });
+      if (childFamilies.length > 0) {
+        let childPatri: TreeNode | undefined = undefined;
+        const firstFam = childFamilies[0];
+        const cfNode = firstFam.fatherHandle
+          ? personMap.get(firstFam.fatherHandle)
+          : undefined;
+        const cmNode = firstFam.motherHandle
+          ? personMap.get(firstFam.motherHandle)
+          : undefined;
+        childPatri = cfNode?.isPatrilineal
+          ? cfNode
+          : cmNode?.isPatrilineal
+            ? cmNode
+            : cfNode || cmNode;
+
+        const sub = buildSubtree(
+          childPatri,
+          childFamilies,
+          personMap,
+          familyMap,
+          visited,
+        );
+        if (sub) {
+          children.push({
+            subtree: sub,
+            width: sub.width,
+            anchorX: sub.anchorX,
+            contour: sub.contour,
+          });
+        } else {
+          const leafContour: Contour = {
+            left: [-CARD_W / 2],
+            right: [CARD_W / 2],
+          };
+          children.push({
+            leaf: child,
+            width: CARD_W,
+            anchorX: CARD_W / 2,
+            contour: leafContour,
+          });
+        }
       } else {
         const leafContour: Contour = {
           left: [-CARD_W / 2],
@@ -206,38 +245,25 @@ function buildSubtree(
           contour: leafContour,
         });
       }
-    } else {
-      const leafContour: Contour = {
-        left: [-CARD_W / 2],
-        right: [CARD_W / 2],
-      };
-      children.push({
-        leaf: child,
-        width: CARD_W,
-        anchorX: CARD_W / 2,
-        contour: leafContour,
-      });
     }
   }
 
   // ── Compute width and anchorX ──
-  const hasCouple = patrilineal && spouse;
-  const coupleWidth = hasCouple ? 2 * CARD_W + COUPLE_GAP : CARD_W;
+  const spouseCount = spouses.length;
+  const coupleWidth = CARD_W + spouseCount * (CARD_W + COUPLE_GAP);
   const halfCard = CARD_W / 2;
 
   if (children.length === 0) {
     // Leaf family: width = couple width, anchor = patri center
-    const coupleRight = hasCouple ? halfCard + COUPLE_GAP + CARD_W : halfCard;
+    const coupleRight = halfCard + spouseCount * (CARD_W + COUPLE_GAP);
     const parentContour: Contour = {
       left: [-halfCard],
       right: [coupleRight],
     };
     return {
-      family,
-      father,
-      mother,
-      patrilineal,
-      spouse,
+      families: sortedFamilies,
+      patrilineal: patri,
+      spouses,
       children,
       width: coupleWidth,
       anchorX: halfCard,
@@ -250,7 +276,7 @@ function buildSubtree(
     const child = children[0];
     const childAnchor = child.anchorX;
 
-    const coupleRight = hasCouple ? halfCard + COUPLE_GAP + CARD_W : halfCard;
+    const coupleRight = halfCard + spouseCount * (CARD_W + COUPLE_GAP);
     const leftExtent = Math.max(halfCard, childAnchor);
     const childRightExtent = child.width - childAnchor;
     const rightExtent = Math.max(coupleRight, childRightExtent);
@@ -269,11 +295,9 @@ function buildSubtree(
     }
 
     return {
-      family,
-      father,
-      mother,
-      patrilineal,
-      spouse,
+      families: sortedFamilies,
+      patrilineal: patri,
+      spouses,
       children,
       width: leftExtent + rightExtent,
       anchorX: leftExtent,
@@ -292,12 +316,8 @@ function buildSubtree(
   };
 
   for (let i = 1; i < children.length; i++) {
-    // minSeparation returns distance from merged contour's reference (child 0 anchor)
-    // to the new child's anchor that prevents overlap at all depths
     const sep = minSeparation(mergedChildContour, children[i].contour);
     childOffsets.push(sep);
-
-    // Merge contours with the new child at offset sep from first child
     mergedChildContour = mergeContours(
       mergedChildContour,
       children[i].contour,
@@ -309,8 +329,6 @@ function buildSubtree(
   const lastAnchor = childOffsets[childOffsets.length - 1];
   const midpointOfAnchors = (firstAnchor + lastAnchor) / 2;
 
-  // Parent sits at midpoint of children anchors
-  // Compute total width from leftmost to rightmost extent
   let blockLeft = Infinity,
     blockRight = -Infinity;
   for (let i = 0; i < children.length; i++) {
@@ -322,42 +340,31 @@ function buildSubtree(
   }
 
   const childrenTotalWidth = blockRight - blockLeft;
-
-  // Store child offsets for use in assignPositions
-  // We encode them in the anchorX positions relative to the children block
   const childAnchors: number[] = childOffsets.map((o) => o - blockLeft);
 
-  // Recompute anchorX positions in the ChildItem for assignPositions compatibility
-  // We need to update the total block structure
   const adjustedAnchorX = midpointOfAnchors - blockLeft;
   const leftExtent = Math.max(halfCard, adjustedAnchorX);
-  const coupleRight = hasCouple ? halfCard + COUPLE_GAP + CARD_W : halfCard;
+  const coupleRight = halfCard + spouseCount * (CARD_W + COUPLE_GAP);
   const childrenRight = childrenTotalWidth - adjustedAnchorX;
   const rightExtent = Math.max(coupleRight, childrenRight);
 
-  // Build combined contour: parent at depth 0, merged child contour at depth 1+
+  // Build combined contour
   const combinedContour: Contour = {
     left: [Math.min(-halfCard, -adjustedAnchorX)],
     right: [Math.max(coupleRight, childrenRight)],
   };
-  // Shift merged child contour so it's relative to the parent anchor
   for (let d = 0; d < mergedChildContour.left.length; d++) {
     combinedContour.left.push(mergedChildContour.left[d] - midpointOfAnchors);
     combinedContour.right.push(mergedChildContour.right[d] - midpointOfAnchors);
   }
 
-  // Override children layout: store block-relative positions
-  // We'll use a different approach in assignPositions for contour-based layout
-  // Store childAnchors and blockLeft info in the subtree for assignPositions
   const subtreeResult: Subtree & {
     childOffsets?: number[];
     blockLeft?: number;
   } = {
-    family,
-    father,
-    mother,
-    patrilineal,
-    spouse,
+    families: sortedFamilies,
+    patrilineal: patri,
+    spouses,
     children,
     width: leftExtent + rightExtent,
     anchorX: leftExtent,
@@ -378,7 +385,7 @@ function assignPositions(
   allNodes: PositionedNode[],
   placed: Set<string>,
 ) {
-  const { patrilineal, spouse, children, anchorX } = subtree;
+  const { patrilineal, spouses, children, anchorX } = subtree;
   const y = generation * (CARD_H + V_SPACE);
   const patriCenterX = startX + anchorX;
 
@@ -393,16 +400,19 @@ function assignPositions(
     placed.add(patrilineal.handle);
   }
 
-  // Place spouse (right of patrilineal)
-  const spouseCardLeft = patriCenterX + CARD_W / 2 + COUPLE_GAP;
-  if (spouse && !placed.has(spouse.handle)) {
-    allNodes.push({
-      node: spouse,
-      x: spouseCardLeft,
-      y,
-      generation,
-    });
-    placed.add(spouse.handle);
+  // Place spouses sequentially to the right
+  let currentSpouseLeft = patriCenterX + CARD_W / 2 + COUPLE_GAP;
+  for (const spouse of spouses) {
+    if (!placed.has(spouse.handle)) {
+      allNodes.push({
+        node: spouse,
+        x: currentSpouseLeft,
+        y,
+        generation,
+      });
+      placed.add(spouse.handle);
+    }
+    currentSpouseLeft += CARD_W + COUPLE_GAP;
   }
 
   // Place children
@@ -520,14 +530,42 @@ export function computeLayout(
     );
   });
 
+  // Group families by their patrilineal person
+  const getPatri = (fam: TreeFamily) => {
+    const father = fam.fatherHandle ? personMap.get(fam.fatherHandle) : null;
+    const mother = fam.motherHandle ? personMap.get(fam.motherHandle) : null;
+    const patri = father?.isPatrilineal
+      ? father
+      : mother?.isPatrilineal
+        ? mother
+        : father || mother;
+    return patri;
+  };
+
+  const rootFamiliesByPatri = new Map<string, TreeFamily[]>();
+  for (const fam of rootFamilies) {
+    const patri = getPatri(fam);
+    const key = patri ? patri.handle : fam.handle;
+    const list = rootFamiliesByPatri.get(key) || [];
+    list.push(fam);
+    rootFamiliesByPatri.set(key, list);
+  }
+
   const allNodes: PositionedNode[] = [];
   const visited = new Set<string>();
   const placed = new Set<string>();
   let cursorX = 0;
 
   // Build subtrees for root families
-  for (const fam of rootFamilies) {
-    const subtree = buildSubtree(fam, personMap, familyMap, visited);
+  for (const [patriHandle, famGroup] of rootFamiliesByPatri.entries()) {
+    const patri = personMap.get(patriHandle);
+    const subtree = buildSubtree(
+      patri,
+      famGroup,
+      personMap,
+      familyMap,
+      visited,
+    );
     if (!subtree) continue;
 
     const rootGen =
@@ -539,11 +577,26 @@ export function computeLayout(
     cursorX += subtree.width + H_SPACE;
   }
 
-  // Handle "Islands": Families that were not connected to roots (possibly due to cycles)
+  // Handle "Islands"
+  const islandFamiliesByPatri = new Map<string, TreeFamily[]>();
   for (const fam of families) {
     if (visited.has(fam.handle)) continue;
+    const patri = getPatri(fam);
+    const key = patri ? patri.handle : fam.handle;
+    const list = islandFamiliesByPatri.get(key) || [];
+    list.push(fam);
+    islandFamiliesByPatri.set(key, list);
+  }
 
-    const subtree = buildSubtree(fam, personMap, familyMap, visited);
+  for (const [patriHandle, famGroup] of islandFamiliesByPatri.entries()) {
+    const patri = personMap.get(patriHandle);
+    const subtree = buildSubtree(
+      patri,
+      famGroup,
+      personMap,
+      familyMap,
+      visited,
+    );
     if (!subtree) continue;
 
     const rootGen =
@@ -590,6 +643,67 @@ export function computeLayout(
   const connections: Connection[] = [];
   const couples: PositionedCouple[] = [];
 
+  // Find spouses of each patrilineal person for line chaining
+  const spousesOfPatri = new Map<
+    string,
+    { spouse: PositionedNode; family: TreeFamily }[]
+  >();
+  for (const fam of families) {
+    const fn = fam.fatherHandle ? nodeMap.get(fam.fatherHandle) : null;
+    const mn = fam.motherHandle ? nodeMap.get(fam.motherHandle) : null;
+    const pn = fn?.node.isPatrilineal
+      ? fn
+      : mn?.node.isPatrilineal
+        ? mn
+        : fn || mn;
+    const sp = pn === fn ? mn : fn;
+    if (pn && sp) {
+      if (!spousesOfPatri.has(pn.node.handle))
+        spousesOfPatri.set(pn.node.handle, []);
+      spousesOfPatri.get(pn.node.handle)!.push({ spouse: sp, family: fam });
+    }
+  }
+
+  // Generate chained couple connections
+  for (const [patriHandle, spousesItems] of spousesOfPatri.entries()) {
+    const patriNode = nodeMap.get(patriHandle);
+    if (!patriNode) continue;
+
+    // sort the spouses by X to draw connections continuously left-to-right
+    spousesItems.sort((a, b) => a.spouse.x - b.spouse.x);
+
+    let leftNode = patriNode; // Start chain from Patrilineal person
+    for (const { spouse, family } of spousesItems) {
+      const rightNode = spouse;
+
+      const actualLeft = leftNode.x < rightNode.x ? leftNode : rightNode;
+      const actualRight = leftNode.x < rightNode.x ? rightNode : leftNode;
+
+      connections.push({
+        fromX: actualLeft.x + CARD_W,
+        fromY: actualLeft.y + CARD_H / 2,
+        toX: actualRight.x,
+        toY: actualRight.y + CARD_H / 2,
+        type: "couple",
+      });
+      couples.push({
+        familyHandle: family.handle,
+        fatherPos: family.fatherHandle
+          ? nodeMap.get(family.fatherHandle)
+          : undefined,
+        motherPos: family.motherHandle
+          ? nodeMap.get(family.motherHandle)
+          : undefined,
+        midX: (actualLeft.x + CARD_W + actualRight.x) / 2,
+        y: actualLeft.y,
+      });
+
+      // Next line starts from this spouse
+      leftNode = rightNode;
+    }
+  }
+
+  // Parent-child connections
   for (const fam of families) {
     const fatherNode = fam.fatherHandle
       ? nodeMap.get(fam.fatherHandle)
@@ -606,26 +720,6 @@ export function computeLayout(
 
     // Safety check for NaN or Infinity
     if (!isFinite(patriNode.x) || !isFinite(patriNode.y)) continue;
-
-    // Couple line (horizontal between cards)
-    if (fatherNode && motherNode) {
-      const left = fatherNode.x < motherNode.x ? fatherNode : motherNode;
-      const right = fatherNode.x < motherNode.x ? motherNode : fatherNode;
-      connections.push({
-        fromX: left.x + CARD_W,
-        fromY: left.y + CARD_H / 2,
-        toX: right.x,
-        toY: right.y + CARD_H / 2,
-        type: "couple",
-      });
-      couples.push({
-        familyHandle: fam.handle,
-        fatherPos: fatherNode,
-        motherPos: motherNode,
-        midX: (left.x + CARD_W + right.x) / 2,
-        y: left.y,
-      });
-    }
 
     // Parent-child connections: strictly orthogonal bus-line with curved elbows
     if (patriNode && fam.children.length > 0) {

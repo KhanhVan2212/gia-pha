@@ -363,14 +363,6 @@ export default function TreeViewPage() {
 
   // Transform state
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const transformRef = useRef(transform);
-  useEffect(() => {
-    transformRef.current = transform;
-  }, [transform]);
-
-  const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef({ startX: 0, startY: 0, startTx: 0, startTy: 0 });
-  const pinchRef = useRef({ initialDist: 0, initialScale: 1 });
 
   // Fetch data
   useEffect(() => {
@@ -674,12 +666,15 @@ export default function TreeViewPage() {
   }, [layout]);
 
   // ═══ Viewport culling: only render visible nodes ═══
-  const CULL_PAD = 300; // px padding around viewport
+  const CULL_PAD = 800; // px padding around viewport (increased for smoother panning without frequent node popping)
 
   const visibleNodes = useMemo(() => {
-    if (!layout || !viewportRef.current) return layout?.nodes ?? [];
-    const vw = viewportRef.current.clientWidth;
-    const vh = viewportRef.current.clientHeight;
+    if (!layout) return [];
+
+    // To avoid "Cannot access refs during render" error, fallback to window.innerWidth
+    // The viewport is roughly the window size minus sidebar, so window size is a safe (slightly larger) bounds
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
     const { x: tx, y: ty, scale } = transform;
     // Convert viewport rect to tree-space coordinates
     const left = -tx / scale - CULL_PAD;
@@ -701,6 +696,8 @@ export default function TreeViewPage() {
   );
 
   // Batched SVG paths for connections
+  // We do NOT cull these based on transform anymore. A static SVG path is hardware accelerated
+  // and much faster than morphing the 'd' attribute on every panning frame.
   const { parentPaths, couplePaths, visibleCouples } = useMemo(() => {
     if (!layout)
       return {
@@ -711,20 +708,8 @@ export default function TreeViewPage() {
     let pp = "";
     let cp = "";
     const vc: PositionedCouple[] = [];
-    // Only render connections where at least one endpoint is visible
-    for (const c of layout.connections) {
-      // Check if any endpoint is near visible area
-      const vw = viewportRef.current?.clientWidth ?? 1200;
-      const vh = viewportRef.current?.clientHeight ?? 900;
-      const { x: tx, y: ty, scale } = transform;
-      const left = -tx / scale - CULL_PAD;
-      const top = -ty / scale - CULL_PAD;
-      const right = (vw - tx) / scale + CULL_PAD;
-      const bottom = (vh - ty) / scale + CULL_PAD;
-      const inView = (x: number, y: number) =>
-        x >= left && x <= right && y >= top && y <= bottom;
-      if (!inView(c.fromX, c.fromY) && !inView(c.toX, c.toY)) continue;
 
+    for (const c of layout.connections) {
       if (c.type === "couple") {
         cp += `M${c.fromX},${c.fromY}L${c.toX},${c.toY}`;
       } else {
@@ -736,17 +721,12 @@ export default function TreeViewPage() {
         }
       }
     }
-    // Visible couples for hearts
+    // Couples for hearts
     for (const c of layout.couples) {
-      if (
-        visibleHandles.has(c.fatherPos?.node.handle ?? "") ||
-        visibleHandles.has(c.motherPos?.node.handle ?? "")
-      ) {
-        vc.push(c);
-      }
+      vc.push(c);
     }
     return { parentPaths: pp, couplePaths: cp, visibleCouples: vc };
-  }, [layout, transform, visibleHandles]);
+  }, [layout]);
 
   // Stable callbacks for PersonCard
   const handleCardHover = useCallback(
@@ -804,33 +784,123 @@ export default function TreeViewPage() {
     if (layout && !loading) setTimeout(fitAll, 50);
   }, [layout, loading]); // eslint-disable-line
 
-  // === Mouse handlers ===
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      startTx: transform.x,
-      startTy: transform.y,
-    };
-  };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    setTransform((t) => ({
-      ...t,
-      x: dragRef.current.startTx + dx,
-      y: dragRef.current.startTy + dy,
-    }));
-  };
-  const handleMouseUp = () => setIsDragging(false);
-
-  // === Scroll-wheel zoom ===
+  // === Unified Touch / Mouse Events ===
+  // We use explicit Touch events because iOS Safari often fails to fire pointermove
+  // consistently during multi-touch gestures unless event.preventDefault() is used.
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
+
+    // --- Touch State ---
+    let lastCx = 0,
+      lastCy = 0,
+      lastDist = 1;
+    let activeTouches = 0;
+
+    const getTouchState = (e: TouchEvent) => {
+      const pts = e.touches;
+      if (pts.length === 0) return { cx: 0, cy: 0, dist: 1 };
+      if (pts.length === 1)
+        return { cx: pts[0].clientX, cy: pts[0].clientY, dist: 1 };
+      const cx = (pts[0].clientX + pts[1].clientX) / 2;
+      const cy = (pts[0].clientY + pts[1].clientY) / 2;
+      const dist =
+        Math.hypot(
+          pts[1].clientX - pts[0].clientX,
+          pts[1].clientY - pts[0].clientY,
+        ) || 1;
+      return { cx, cy, dist };
+    };
+
+    const updateTouchState = (e: TouchEvent) => {
+      const { cx, cy, dist } = getTouchState(e);
+      lastCx = cx;
+      lastCy = cy;
+      lastDist = dist;
+      activeTouches = e.touches.length;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      // Prevent browser's native pinch-zoom and scroll out of the box
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+      updateTouchState(e);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 0) return;
+      // ALWAYS prevent default during a move so iOS Safari doesn't hijack it natively
+      // and stop firing javascript events.
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      const n = e.touches.length;
+      const { cx, cy, dist } = getTouchState(e);
+
+      if (n === 1 && activeTouches === 1) {
+        // Pan
+        const dx = cx - lastCx;
+        const dy = cy - lastCy;
+        setTransform((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      } else if (n >= 2 && activeTouches >= 2) {
+        // Pinch-zoom + pan
+        const scaleDelta = dist / lastDist;
+        const dx = cx - lastCx;
+        const dy = cy - lastCy;
+        const rect = el.getBoundingClientRect();
+        const mx = cx - rect.left;
+        const my = cy - rect.top;
+        setTransform((prev) => {
+          const newScale = Math.min(Math.max(prev.scale * scaleDelta, 0.15), 3);
+          const r = newScale / prev.scale;
+          return {
+            scale: newScale,
+            x: mx - (mx - prev.x) * r + dx,
+            y: my - (my - prev.y) * r + dy,
+          };
+        });
+      }
+
+      lastCx = cx;
+      lastCy = cy;
+      lastDist = dist;
+      activeTouches = n;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      updateTouchState(e);
+    };
+
+    // --- Mouse State ---
+    let isMouseDown = false;
+    let lastMx = 0,
+      lastMy = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      isMouseDown = true;
+      lastMx = e.clientX;
+      lastMy = e.clientY;
+      el.style.cursor = "grabbing";
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isMouseDown) return;
+      const dx = e.clientX - lastMx;
+      const dy = e.clientY - lastMy;
+      setTransform((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      lastMx = e.clientX;
+      lastMy = e.clientY;
+    };
+
+    const onMouseUp = () => {
+      isMouseDown = false;
+      el.style.cursor = "grab";
+    };
+
+    // Scroll-wheel zoom (desktop)
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
@@ -847,107 +917,32 @@ export default function TreeViewPage() {
         };
       });
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
 
-  // === Touch handlers ===
-  useEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-
-    let touching = false;
-    let lastTouches: Touch[] = [];
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        touching = true;
-        const t = e.touches[0];
-        dragRef.current = {
-          startX: t.clientX,
-          startY: t.clientY,
-          startTx: transformRef.current.x,
-          startTy: transformRef.current.y,
-        };
-      } else if (e.touches.length === 2) {
-        const dist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY,
-        );
-        pinchRef.current = {
-          initialDist: dist,
-          initialScale: transformRef.current.scale,
-        };
-      }
-      lastTouches = Array.from(e.touches);
-    };
-
-    let rafId: number | null = null;
-
-    const onTouchMove = (e: TouchEvent) => {
-      // Always prevent default to prevent scrolling while interacting with the tree
-      if (e.cancelable) e.preventDefault();
-
-      if (rafId) return; // Throttle to screen refresh rate
-
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (e.touches.length === 1 && touching) {
-          const t = e.touches[0];
-          const dx = t.clientX - dragRef.current.startX;
-          const dy = t.clientY - dragRef.current.startY;
-          setTransform((prev) => ({
-            ...prev,
-            x: dragRef.current.startTx + dx,
-            y: dragRef.current.startTy + dy,
-          }));
-        } else if (e.touches.length === 2) {
-          const dist = Math.hypot(
-            e.touches[0].clientX - e.touches[1].clientX,
-            e.touches[0].clientY - e.touches[1].clientY,
-          );
-          const ratio = dist / pinchRef.current.initialDist;
-          const newScale = Math.min(
-            Math.max(pinchRef.current.initialScale * ratio, 0.15),
-            3,
-          );
-
-          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-          const rect = el.getBoundingClientRect();
-          const mx = midX - rect.left;
-          const my = midY - rect.top;
-
-          setTransform((prev) => {
-            const r = newScale / prev.scale;
-            return {
-              scale: newScale,
-              x: mx - (mx - prev.x) * r,
-              y: my - (my - prev.y) * r,
-            };
-          });
-        }
-      });
-      lastTouches = Array.from(e.touches);
-    };
-
-    const onTouchEnd = () => {
-      touching = false;
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-    };
-
+    // NOTE: { passive: false } is absolutely required on iOS to allow e.preventDefault()
     el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd); // iOS fires touchcancel often
+
+    el.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+
+      el.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+
+      el.removeEventListener("wheel", onWheel);
     };
-  }, []); // Stable handlers
+  }, []);
 
   // Pan to person
   const panToPerson = useCallback(
@@ -1182,11 +1177,8 @@ export default function TreeViewPage() {
       <div className="flex-1 flex gap-0 min-h-0">
         <div
           ref={viewportRef}
-          className="flex-1 relative overflow-hidden rounded-xl border-2 bg-gradient-to-br from-background to-muted/30 cursor-grab active:cursor-grabbing select-none touch-none"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          className="flex-1 relative overflow-hidden rounded-xl border-2 bg-gradient-to-br from-background to-muted/30 cursor-grab active:cursor-grabbing select-none"
+          style={{ touchAction: "none" }}
           onClick={() => {
             setShowSearch(false);
             setContextMenu(null);

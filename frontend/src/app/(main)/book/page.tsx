@@ -280,7 +280,7 @@ function CoverPage({ bookData, theme: t }: { bookData: BookData; theme: Theme })
             <div className="w-24 h-1 bg-primary mb-8 rounded-full" />
             <h1 className="text-4xl md:text-6xl font-bold tracking-[0.2em] mb-4 uppercase">Gia Phả</h1>
             <h2 className="text-3xl md:text-5xl font-extrabold mb-12" style={{ color: t.secondary }}>
-                Dòng Họ {bookData.familyName.toUpperCase()}
+                Dòng Họ NGUYỄN VĂN
             </h2>
             <div className="w-32 h-1 bg-primary/20 mb-12 rounded-full" />
             <div className="space-y-3 text-lg opacity-70 italic">
@@ -396,7 +396,7 @@ function ClosingContent({ bookData, theme: t }: { bookData: BookData; theme: The
                 nhằm lưu giữ ngọn lửa truyền thống cho muôn đời sau.
             </p>
             <div className="pt-12 text-xs font-bold uppercase tracking-[0.3em] opacity-30">
-                Gia Phả Số {bookData.familyName} · {new Date().getFullYear()}
+                Gia Phả Số NGUYỄN VĂN · {new Date().getFullYear()}
             </div>
         </div>
     );
