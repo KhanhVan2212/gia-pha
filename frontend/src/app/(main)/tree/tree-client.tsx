@@ -1897,19 +1897,13 @@ function PersonCard({
   onToggleCollapse: (handle: string) => void;
 }) {
   const { node, x, y } = item;
-  const isMale = node.gender === 1;
-  const isFemale = node.gender === 2;
   const isDead = !node.isLiving;
   const isPatri = node.isPatrilineal;
 
   // ── Color system ──
   const dotColor = !isPatri
-    ? "#94a3b8"
-    : isMale
-      ? "#818cf8"
-      : isFemale
-        ? "#f472b6"
-        : "#94a3b8";
+    ? "#10b981" // emerald-500
+    : "#f43f5e"; // rose-500
 
   // F1: MINI zoom → just a colored dot with tooltip
   if (zoomLevel === "mini") {
@@ -1952,28 +1946,20 @@ function PersonCard({
       : node.displayName.slice(0, 2).toUpperCase();
 
   const avatarBg = !isPatri
-    ? "bg-stone-300 text-stone-600"
-    : isMale
-      ? isDead
-        ? "bg-indigo-300 text-indigo-800"
-        : "bg-indigo-400 text-white"
-      : isFemale
-        ? isDead
-          ? "bg-rose-300 text-rose-800"
-          : "bg-rose-400 text-white"
-        : "bg-slate-300 text-slate-600";
+    ? isDead
+      ? "bg-emerald-200 text-emerald-800"
+      : "bg-emerald-400 text-white"
+    : isDead
+      ? "bg-rose-300 text-rose-800"
+      : "bg-rose-400 text-white";
 
   const bgClass = !isPatri
-    ? "from-stone-50 to-stone-100 border-stone-300/80 border-dashed"
+    ? isDead
+      ? "from-emerald-50/60 to-slate-50 border-emerald-300/60 border-dashed"
+      : "from-emerald-50 to-emerald-100 border-emerald-300 border-dashed"
     : isDead
-      ? isMale
-        ? "from-indigo-50/60 to-slate-50 border-indigo-300/60"
-        : "from-rose-50/60 to-slate-50 border-rose-300/60"
-      : isMale
-        ? "from-indigo-50 to-violet-50 border-indigo-300"
-        : isFemale
-          ? "from-rose-50 to-pink-50 border-rose-300"
-          : "from-slate-50 to-slate-100 border-slate-300";
+      ? "from-rose-50/60 to-slate-50 border-rose-300/60"
+      : "from-rose-50 to-rose-100 border-rose-300";
 
   const glowClass = isSelected
     ? "ring-2 ring-blue-500 ring-offset-2 shadow-blue-200 shadow-lg"
@@ -2374,14 +2360,14 @@ function StatsOverlay({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            <span className="w-2 h-2 rounded-full bg-rose-400" />
             <span className="text-slate-600">Chính tộc</span>
             <span className="ml-auto font-medium text-slate-800">
               {stats.patrilinealCount}
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-stone-300" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
             <span className="text-slate-600">Ngoại tộc</span>
             <span className="ml-auto font-medium text-slate-800">
               {stats.nonPatrilinealCount}
