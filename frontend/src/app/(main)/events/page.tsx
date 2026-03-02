@@ -11,7 +11,11 @@ import {
   User,
   ChevronRight,
   Info,
+  Moon,
+  Sun,
 } from "lucide-react";
+// @ts-expect-error - lunar-javascript has no typescript definitions available
+import { Lunar } from "lunar-javascript";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,14 +104,74 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
   const [location, setLocation] = useState("");
   const [type, setType] = useState("MEETING");
 
+  // Lunar/Solar states
+  const [isLunar, setIsLunar] = useState(true);
+
+  // For Lunar Input
+  const now = new Date();
+  const todayLunar = Lunar.fromDate(now);
+  const [lunarDay, setLunarDay] = useState(todayLunar.getDay());
+  const [lunarMonth, setLunarMonth] = useState(todayLunar.getMonth());
+  const [lunarYear, setLunarYear] = useState(todayLunar.getYear());
+  const [isLeapMonth, setIsLeapMonth] = useState(false);
+  const [time, setTime] = useState(
+    now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+  );
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setLocation("");
+    setType("MEETING");
+    const newNow = new Date();
+    setStartAt(""); // Keep empty for solar by default
+    const newLunar = Lunar.fromDate(newNow);
+    setLunarDay(newLunar.getDay());
+    setLunarMonth(newLunar.getMonth());
+    setLunarYear(newLunar.getYear());
+    setIsLeapMonth(false);
+    setTime(
+      newNow.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
+  };
+
   const handleSubmit = async () => {
-    if (!title.trim() || !startAt || !user) return;
+    if (!title.trim() || !user) return;
+
+    let finalStartAt = "";
+
+    if (isLunar) {
+      if (!lunarDay || !lunarMonth || !lunarYear || !time) return;
+      try {
+        const lunarMonthAbs = Math.abs(lunarMonth); // lunar-javascript sometimes uses negative for leap, but it also has static leap month
+        const lunar = Lunar.fromYmd(
+          lunarYear,
+          isLeapMonth ? -lunarMonthAbs : lunarMonthAbs,
+          lunarDay,
+        );
+        const solar = lunar.getSolar();
+        const solarDateStr = solar.toYmd(); // YYYY-MM-DD
+        const dateObj = new Date(`${solarDateStr}T${time}:00`);
+        finalStartAt = dateObj.toISOString();
+      } catch (err) {
+        console.error("Invalid lunar date:", err);
+        alert("Ngày âm lịch không hợp lệ. Vui lòng kiểm tra lại.");
+        return;
+      }
+    } else {
+      if (!startAt) return;
+      finalStartAt = new Date(startAt).toISOString();
+    }
+
     setSubmitting(true);
     try {
       const { error } = await supabase.from("events").insert({
         title: title.trim(),
         description: description.trim() || null,
-        start_at: new Date(startAt).toISOString(),
+        start_at: finalStartAt,
         location: location.trim() || null,
         type,
         creator_id: user.id,
@@ -116,10 +180,7 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
       });
       if (!error) {
         setOpen(false);
-        setTitle("");
-        setDescription("");
-        setStartAt("");
-        setLocation("");
+        resetForm();
         onCreated();
       }
     } finally {
@@ -154,16 +215,124 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
               className="rounded-xl bg-muted/50 border-transparent focus:bg-background transition-all"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium ml-1">
-              Thời gian <span className="text-rose-500">*</span>
-            </label>
-            <Input
-              type="datetime-local"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-              className="rounded-xl bg-muted/50 border-transparent focus:bg-background transition-all"
-            />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium ml-1">
+                Thời gian diễn ra <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
+                <button
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                    isLunar
+                      ? "bg-white text-orange-600 shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setIsLunar(true)}
+                >
+                  <Moon className="w-3.5 h-3.5" />
+                  Âm lịch
+                </button>
+                <button
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                    !isLunar
+                      ? "bg-white text-orange-600 shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setIsLunar(false)}
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                  Dương lịch
+                </button>
+              </div>
+            </div>
+
+            {isLunar ? (
+              <div className="space-y-3 rounded-xl border p-3 bg-muted/20">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground ml-1">
+                      Ngày (ÂL)
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={lunarDay}
+                      onChange={(e) =>
+                        setLunarDay(parseInt(e.target.value) || 1)
+                      }
+                      className="rounded-lg bg-background border-muted"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground ml-1">
+                      Tháng (ÂL)
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={lunarMonth}
+                      onChange={(e) =>
+                        setLunarMonth(parseInt(e.target.value) || 1)
+                      }
+                      className="rounded-lg bg-background border-muted"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground ml-1">
+                      Năm (ÂL)
+                    </label>
+                    <Input
+                      type="number"
+                      min={1900}
+                      max={2100}
+                      value={lunarYear}
+                      onChange={(e) =>
+                        setLunarYear(
+                          parseInt(e.target.value) || new Date().getFullYear(),
+                        )
+                      }
+                      className="rounded-lg bg-background border-muted"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      className="rounded-sm text-orange-600 focus:ring-orange-600 w-4 h-4 cursor-pointer"
+                      checked={isLeapMonth}
+                      onChange={(e) => setIsLeapMonth(e.target.checked)}
+                    />
+                    <span>Là tháng nhuận</span>
+                  </label>
+
+                  <div className="flex-1 max-w-35 space-y-1">
+                    <label className="text-xs text-muted-foreground ml-1">
+                      Giờ phút
+                    </label>
+                    <Input
+                      type="time"
+                      value={time}
+                      onChange={(e) => setTime(e.target.value)}
+                      className="rounded-lg bg-background border-muted"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Input
+                type="datetime-local"
+                value={startAt}
+                onChange={(e) => setStartAt(e.target.value)}
+                className="rounded-xl bg-muted/50 border-transparent focus:bg-background transition-all"
+              />
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium ml-1">Phân loại</label>
@@ -201,7 +370,12 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
           <Button
             className="w-full rounded-xl h-11 bg-orange-600 hover:bg-orange-700 mt-2 font-bold transition-all"
             onClick={handleSubmit}
-            disabled={!title.trim() || !startAt || submitting}
+            disabled={
+              !title.trim() ||
+              (!isLunar && !startAt) ||
+              (isLunar && (!lunarDay || !lunarMonth || !lunarYear || !time)) ||
+              submitting
+            }
           >
             {submitting ? "Đang xử lý..." : "Gửi yêu cầu duyệt"}
           </Button>
