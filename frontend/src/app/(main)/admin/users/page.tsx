@@ -13,8 +13,10 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
+  Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -110,6 +112,11 @@ export default function AdminUsersPage() {
   const [selectedPersonHandle, setSelectedPersonHandle] = useState<
     string | null
   >(null);
+
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
 
   // Fetch users from profiles table
   const fetchUsers = useCallback(async () => {
@@ -261,6 +268,37 @@ export default function AdminUsersPage() {
   const getInviteUrl = (code: string) => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     return `${baseUrl}/register?code=${code}`;
+  };
+
+  const handleResetPassword = async () => {
+    if (!resettingUserId || !newPassword) return;
+    setIsResetting(true);
+    try {
+      const res = await fetch("/api/admin/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: resettingUserId,
+          newPassword: newPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        toast.error(`Lỗi: ${errorData.error}`);
+        return;
+      }
+
+      toast.success("Thay đổi mật khẩu thành công!");
+      setPasswordDialogOpen(false);
+      setNewPassword("");
+      setResettingUserId(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Đã xảy ra lỗi khi thay đổi mật khẩu.");
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   const handleCloseDialog = () => {
@@ -453,6 +491,71 @@ export default function AdminUsersPage() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Reset Password Dialog */}
+          <Dialog
+            open={passwordDialogOpen}
+            onOpenChange={(open) => {
+              setPasswordDialogOpen(open);
+              if (!open) {
+                setResettingUserId(null);
+                setNewPassword("");
+              }
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Đặt lại mật khẩu</DialogTitle>
+                <DialogDescription>
+                  Nhập mật khẩu mới cho tài khoản. Mật khẩu cần có ít nhất 6 ký
+                  tự.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Mật khẩu mới</label>
+                  <Input
+                    type="text" // Use text so admin can see what they type
+                    placeholder="Nhập mật khẩu mới..."
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  {resettingUserId && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Đang đổi mật khẩu cho:{" "}
+                      <strong>
+                        {users.find((u) => u.id === resettingUserId)
+                          ?.display_name ||
+                          users.find((u) => u.id === resettingUserId)?.email}
+                      </strong>
+                    </p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setPasswordDialogOpen(false)}
+                    disabled={isResetting}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    onClick={handleResetPassword}
+                    disabled={isResetting || newPassword.length < 6}
+                  >
+                    {isResetting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Đang lưu...
+                      </>
+                    ) : (
+                      "Lưu thay đổi"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -539,6 +642,16 @@ export default function AdminUsersPage() {
                           >
                             <Link2 className="h-4 w-4 mr-2" />
                             Liên kết thành viên
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setResettingUserId(user.id);
+                              setPasswordDialogOpen(true);
+                            }}
+                          >
+                            <Key className="h-4 w-4 mr-2" />
+                            Đổi mật khẩu
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
