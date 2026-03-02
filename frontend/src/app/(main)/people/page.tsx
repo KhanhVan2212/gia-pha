@@ -45,6 +45,7 @@ export default function PeopleListPage() {
           .select(
             "handle, display_name, gender, birth_year, generation, is_living, is_privacy_filtered",
           )
+          .order("generation", { ascending: true, nullsFirst: false })
           .order("birth_year", { ascending: true, nullsFirst: false });
         if (!error && data) {
           setPeople(
