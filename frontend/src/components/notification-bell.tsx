@@ -17,7 +17,7 @@ export function NotificationBell() {
   const firstFetchDone = useRef(false);
 
   useEffect(() => {
-    if (!isLoggedIn || !user) return;
+    if (!isLoggedIn || !user?.id) return;
 
     const fetchCountAndNew = async () => {
       try {
@@ -62,8 +62,10 @@ export function NotificationBell() {
     fetchCountAndNew();
 
     // Subscribe to realtime changes in notifications table
+    // Use a unique channel name to prevent conflicts if component remounts rapidly
+    const channelName = `public:notifications:user_${user.id}_${Math.random().toString(36).substring(7)}`;
     const channel = supabase
-      .channel("schema-db-changes")
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -86,12 +88,14 @@ export function NotificationBell() {
 
     // Poll every 15s for fallback quicker notification if realtime drops
     const interval = setInterval(fetchCountAndNew, 15000);
+
     return () => {
       clearInterval(interval);
       supabase.removeChannel(channel);
       window.removeEventListener("notifications_read", handleLocalUpdate);
     };
-  }, [isLoggedIn, user, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, user?.id]); // Removed router to prevent reconnecting on navigation
 
   return (
     <Button
