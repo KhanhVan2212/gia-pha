@@ -192,7 +192,7 @@ function CreateEventDialog({ onCreated }: { onCreated: () => void }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="rounded-full shadow-lg shadow-orange-500/20 bg-orange-600 hover:bg-orange-700 transition-all active:scale-95">
+        <Button className="rounded-full shadow-lg shadow-orange-500/20 bg-white hover:bg-white/80 text-black transition-all active:scale-95">
           <Plus className="mr-2 h-4 w-4" />
           Tạo sự kiện
         </Button>

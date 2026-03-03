@@ -148,8 +148,8 @@ export default function MediaGallery() {
             <div className="inline-flex items-center rounded-full px-3 py-1 text-xs md:text-sm font-medium text-[#f6bf78] bg-white/10 mb-2">
               <ImageIcon className="h-4 w-4 mr-2" /> Kho tư liệu dòng họ
             </div>
-            <h1 className="text-3xl md:text-4xl text-white font-extrabold tracking-tight">
-              Thư viện <span className="text-white">Hình ảnh</span>
+            <h1 className="text-3xl md:text-4xl text-white/90 font-extrabold tracking-tight">
+              Thư viện <span className="text-white/90">Hình ảnh</span>
             </h1>
             <p className="text-white/80 max-w-xl text-sm md:text-base">
               Nơi lưu trữ những khoảnh khắc, thước phim và tài liệu quý giá của
@@ -171,7 +171,7 @@ export default function MediaGallery() {
                 <Button
                   onClick={() => open()}
                   disabled={uploading}
-                  className="rounded-2xl bg-white text-black h-12 px-6 shadow-lg shadow-white/20 hover:scale-105 transition-transform"
+                  className="rounded-2xl bg-white text-black h-12 px-6 shadow-lg shadow-white/20 hover:scale-105 hover:bg-white/80 transition-transform"
                 >
                   {uploading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

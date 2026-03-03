@@ -105,7 +105,7 @@ export default function DirectoryPage() {
           className="absolute bottom-0 left-0 object-cover brightness-120"
         />
         <div className="relative z-10">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white/90 flex items-center gap-3">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white/90 flex items-center gap-3">
             <Contact className="h-8 w-8 text-white/90" />
             Danh bạ dòng họ
           </h1>
