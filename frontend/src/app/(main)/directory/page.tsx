@@ -97,13 +97,19 @@ export default function DirectoryPage() {
   return (
     <div className="space-y-8 pb-8">
       {/* Page Header - Tương tự Hero của Home nhưng nhỏ hơn */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-indigo-500/10 via-primary/5 to-transparent p-6 md:p-8 border border-primary/10 shadow-sm">
+      <div className="relative flex flex-col justify-center overflow-hidden rounded-3xl bg-[#ad1122] p-6 md:p-8 border border-primary/10 shadow-sm min-h-[250px]">
+        <Image
+          src="/landing-footer.png"
+          alt="Background"
+          fill
+          className="absolute bottom-0 left-0 object-cover brightness-120"
+        />
         <div className="relative z-10">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
-            <Contact className="h-8 w-8 text-indigo-600" />
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white/90 flex items-center gap-3">
+            <Contact className="h-8 w-8 text-white/90" />
             Danh bạ dòng họ
           </h1>
-          <p className="text-muted-foreground mt-2 max-w-xl">
+          <p className="text-white/80 mt-2 max-w-xl">
             Kết nối và tìm kiếm thông tin liên lạc của các thành viên đã đăng ký
             trong hệ thống.
           </p>

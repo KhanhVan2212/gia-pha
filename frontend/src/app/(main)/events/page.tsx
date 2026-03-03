@@ -32,6 +32,7 @@ import { useAuth } from "@/components/auth-provider";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import Image from "next/image";
 
 // === Types ===
 interface EventItem {
@@ -496,14 +497,20 @@ export default function EventsPage() {
   return (
     <div className="space-y-8 pb-12">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-[2rem] bg-linear-to-br from-orange-500/10 via-rose-500/5 to-transparent p-8 md:p-12 border border-orange-500/10 shadow-sm">
+      <div className="relative flex flex-col justify-center min-h-[250px] overflow-hidden rounded-3xl bg-[#ad1122] p-8 md:p-12 border border-orange-500/10 shadow-sm">
+        <Image
+          src="/landing-footer.png"
+          alt="Background"
+          fill
+          className="absolute bottom-0 left-0 object-cover brightness-120"
+        />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-xl">
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
-              <CalendarDays className="h-8 w-8 text-orange-600" />
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white/90 flex items-center gap-3">
+              <CalendarDays className="h-8 w-8 text-white/90" />
               Sự kiện dòng họ
             </h1>
-            <p className="text-muted-foreground mt-3 text-lg leading-relaxed">
+            <p className="text-white/80 mt-3 text-lg leading-relaxed">
               Cập nhật lịch giỗ chạp, họp mặt và các hoạt động văn hóa tâm linh
               gắn kết các thành viên.
             </p>

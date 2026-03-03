@@ -2239,7 +2239,7 @@ function GenerationHeaders({
   return (
     <div
       className="absolute left-0 top-0 bottom-0 overflow-hidden pointer-events-none"
-      style={{ width: 100 }}
+      style={{ width: 120 }}
     >
       {entries.map(([gen, count]) => {
         const rowY = (gen - 1) * (cardH + V_SPACE);

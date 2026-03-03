@@ -27,6 +27,7 @@ import { useAuth } from "@/components/auth-provider";
 import { supabase } from "@/lib/supabase";
 import { CldUploadWidget, CldImage } from "next-cloudinary";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface MediaItem {
   id: string;
@@ -135,16 +136,22 @@ export default function MediaGallery() {
   return (
     <div className="space-y-8 pb-10">
       {/* --- Header Section --- */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-primary/10 via-background to-transparent p-6 md:p-10 border border-primary/10 shadow-sm">
+      <div className="relative flex flex-col justify-center min-h-[250px] overflow-hidden rounded-3xl bg-[#ad1122] p-6 md:p-10 border border-primary/10 shadow-sm">
+        <Image
+          src="/landing-footer.png"
+          alt="Background"
+          fill
+          className="absolute bottom-0 left-0 object-cover brightness-120"
+        />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center rounded-full px-3 py-1 text-xs md:text-sm font-medium text-primary bg-primary/10 mb-2">
+            <div className="inline-flex items-center rounded-full px-3 py-1 text-xs md:text-sm font-medium text-[#f6bf78] bg-white/10 mb-2">
               <ImageIcon className="h-4 w-4 mr-2" /> Kho tư liệu dòng họ
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-              Thư viện <span className="text-primary">Hình ảnh</span>
+            <h1 className="text-3xl md:text-4xl text-white font-extrabold tracking-tight">
+              Thư viện <span className="text-white">Hình ảnh</span>
             </h1>
-            <p className="text-muted-foreground max-w-xl text-sm md:text-base">
+            <p className="text-white/80 max-w-xl text-sm md:text-base">
               Nơi lưu trữ những khoảnh khắc, thước phim và tài liệu quý giá của
               các thế hệ trong gia đình.
             </p>
@@ -164,7 +171,7 @@ export default function MediaGallery() {
                 <Button
                   onClick={() => open()}
                   disabled={uploading}
-                  className="rounded-2xl h-12 px-6 shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
+                  className="rounded-2xl bg-white text-black h-12 px-6 shadow-lg shadow-white/20 hover:scale-105 transition-transform"
                 >
                   {uploading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

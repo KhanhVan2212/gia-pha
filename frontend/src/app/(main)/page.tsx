@@ -16,6 +16,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import Image from "next/image";
 
 interface Stats {
   people: number;
@@ -162,15 +163,22 @@ export default function HomePage() {
   return (
     <div className="space-y-8 pb-8">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-primary/10 via-primary/5 to-transparent p-8 md:p-12 border border-primary/10 shadow-sm">
+      <div className=" bg-no-repeat bg-contain bg-right relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#f7d5ad] to-[#fbead3] p-8 md:p-12 border border-primary/10 shadow-sm">
+        <Image
+          src="/bg-home.png"
+          alt="Background"
+          width={500}
+          height={500}
+          className="absolute right-1 top-0 object-contain"
+        />
         <div className="relative z-10 max-w-3xl">
-          <div className="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium text-primary bg-primary/10 mb-6">
+          <div className="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium text-black bg-black/10 mb-6">
             👋 Chào mừng bạn trở lại
           </div>
-          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-foreground mb-4">
-            Gia Phả Số <span className="text-primary">Dòng Họ Nguyễn</span>
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-black mb-4">
+            Gia Phả Số <span className="text-black">Dòng Họ Nguyễn</span>
           </h1>
-          <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
+          <p className="text-lg text-black/80 leading-relaxed max-w-2xl">
             Nơi linh thiêng lưu giữ cội nguồn, gắn kết các thế hệ và phát huy
             truyền thống tốt đẹp của dòng tộc qua dòng chảy thời gian.
           </p>

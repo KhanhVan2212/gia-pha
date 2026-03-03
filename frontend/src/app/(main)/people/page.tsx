@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface Person {
   handle: string;
@@ -80,15 +81,21 @@ export default function PeopleListPage() {
   return (
     <div className="space-y-8 pb-8">
       {/* Header Section - Đồng bộ style với Home */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-primary/10 via-primary/5 to-transparent p-6 md:p-10 border border-primary/10 shadow-sm">
+      <div className="relative flex flex-col justify-center min-h-[250px] overflow-hidden rounded-3xl bg-[#ad1122] p-6 md:p-10 border border-primary/10 shadow-sm">
+        <Image
+          src="/landing-footer.png"
+          alt="Background"
+          fill
+          className="absolute bottom-0 left-0 object-cover brightness-120"
+        />
         <div className="relative z-10">
-          <div className="inline-flex items-center rounded-full px-3 py-1 text-xs md:text-sm font-medium text-emerald-600 bg-emerald-500/10 mb-4">
+          <div className="inline-flex items-center rounded-full px-3 py-1 text-xs md:text-sm font-medium text-[#f6bf78] bg-white/10 mb-4">
             <Users className="h-4 w-4 mr-2" /> Danh mục dòng tộc
           </div>
-          <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight text-foreground mb-2">
-            Thành viên <span className="text-primary">Gia phả</span>
+          <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight text-white/90 mb-2">
+            Thành viên <span className="text-white/90">Gia phả</span>
           </h1>
-          <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
+          <p className="text-sm md:text-base text-white/90 max-w-2xl">
             Tra cứu và tìm kiếm thông tin chi tiết của {people.length} thành
             viên trong dòng họ Nguyễn.
           </p>
